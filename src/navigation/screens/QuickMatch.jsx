@@ -1,11 +1,15 @@
-import { StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, TouchableWithoutFeedback, View } from "react-native";
 import GoBack from '../../images/goback.svg';
+import { useNavigation } from "@react-navigation/native";
 
 export function QuickMatch() {
+    const navigation = useNavigation();
     return (
         <View style={styles.container}>
             <View style={styles.header}>
-                <GoBack style={{position: 'absolute', left: 25}} />
+                <TouchableWithoutFeedback onPress={() => navigation.goBack()}>
+                    <GoBack style={{position: 'absolute', left: 30}} />
+                </TouchableWithoutFeedback>
                 <Text style={styles.headerText}>빠른 매칭</Text>
             </View>
             <View style={{justifyContent: 'center', alignItems: 'center', flex: 1}}>
@@ -27,7 +31,10 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         alignItems: 'center',
         marginTop: 50,
-        position: 'static'
+        position: 'absolute',
+        flexDirection: 'row',
+        top: 20,
+        width: '100%',
     },
     headerText: {
         fontSize: 20,
