@@ -1,36 +1,14 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useFocusEffect } from "@react-navigation/native";
 import More from "../../icons/more.svg";
 import DirectionBlack from "../../icons/direction_black.svg";
 import TravelIcon from "../../icons/travelIcon.svg";
 import { useAuth } from "../../auth";
+import { decodeUserIdFromToken } from "../../auth/userId";
 import { fetchTrips, fetchUser } from "../../services";
-
-function decodeUserIdFromToken(token) {
-  if (!token) {
-    return 1;
-  }
-
-  if (token === "master") {
-    return 1;
-  }
-
-  try {
-    const decoded = globalThis.atob ? globalThis.atob(token) : null;
-    if (!decoded) {
-      return 1;
-    }
-
-    if (!decoded.startsWith("userId:")) {
-      return 1;
-    }
-
-    const value = Number(decoded.replace("userId:", ""));
-    return Number.isFinite(value) && value > 0 ? value : 1;
-  } catch {
-    return 1;
-  }
-}
+import { fetchAllCities } from "../../services/placeService";
+import { pickCurrentTrip } from "../../utils/trip";
 
 function formatTripRange(startDate, endDate) {
   if (!startDate || !endDate) {
@@ -40,34 +18,42 @@ function formatTripRange(startDate, endDate) {
   return `${startDate} ~ ${endDate}`;
 }
 
-export function MyPage() {
+export function MyPage({ navigation }) {
   const { token, logout } = useAuth();
   const [user, setUser] = useState(null);
   const [trips, setTrips] = useState([]);
+  const [currentCity, setCurrentCity] = useState(null);
 
   const userId = useMemo(() => decodeUserIdFromToken(token), [token]);
 
-  useEffect(() => {
-    async function load() {
-      try {
-        const [userResponse, tripsResponse] = await Promise.all([
-          fetchUser(userId),
-          fetchTrips(),
-        ]);
+  useFocusEffect(
+    useCallback(() => {
+      async function load() {
+        try {
+          const [userResponse, tripsResponse, allCities] = await Promise.all([
+            fetchUser(userId),
+            fetchTrips(),
+            fetchAllCities(),
+          ]);
 
-        const loadedUser = userResponse?.user ?? null;
-        const loadedTrips = (tripsResponse?.trips ?? []).filter((trip) => trip?.userId === userId);
+          const loadedUser = userResponse?.user ?? null;
+          const loadedTrips = (tripsResponse?.trips ?? []).filter((trip) => trip?.userId === userId);
+          const currentTrip = pickCurrentTrip(loadedTrips);
+          const city = allCities.find((item) => item.id === currentTrip?.cityId) || null;
 
-        setUser(loadedUser);
-        setTrips(loadedTrips);
-      } catch {
-        setUser(null);
-        setTrips([]);
+          setUser(loadedUser);
+          setTrips(loadedTrips);
+          setCurrentCity(city);
+        } catch {
+          setUser(null);
+          setTrips([]);
+          setCurrentCity(null);
+        }
       }
-    }
 
-    load();
-  }, [userId]);
+      load();
+    }, [userId]),
+  );
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
@@ -79,41 +65,40 @@ export function MyPage() {
         </View>
 
         <View>
-          <Text style={styles.userCode}>USER #{user?.id ?? "23941"}</Text>
-          <Text style={styles.userName}>{user?.name || "야호호"}</Text>
+          <Text style={styles.userCode}>USER #{user?.id ?? "-"}</Text>
+          <Text style={styles.userName}>{user?.name || "-"}</Text>
           <View style={styles.tagsRow}>
             {(user?.keywords ?? []).slice(0, 2).map((keyword) => (
               <View key={keyword.id} style={styles.tagPill}><Text style={styles.tagText}>#{keyword.name}</Text></View>
             ))}
-            {(user?.keywords ?? []).length === 0 ? (
-              <>
-                <View style={styles.tagPill}><Text style={styles.tagText}>#역동적인현지체험</Text></View>
-                <View style={styles.tagPill}><Text style={styles.tagText}>#휴식</Text></View>
-              </>
-            ) : null}
           </View>
         </View>
       </View>
 
       <View style={styles.sheet}>
         <Text style={styles.sectionTitle}>나의 지역</Text>
-        <Text style={styles.sectionSubtitle}>지금까지 3명의 밍글러와 함께 했어요!</Text>
+        <Text style={styles.sectionSubtitle}>현재 여행 기준 지역 정보입니다.</Text>
 
         <View style={styles.locationCard}>
           <View style={styles.locationTopRow}>
-            <Text style={styles.locationTitle}>서울특별시 마포구</Text>
+            <Text style={styles.locationTitle}>{currentCity?.name || "등록된 여행 지역 없음"}</Text>
             <DirectionBlack />
           </View>
-          <Text style={styles.locationSub}>Mapo-gu</Text>
+          <Text style={styles.locationSub}>{currentCity?.name || "-"}</Text>
           <View style={styles.locationDivider} />
-          <Text style={styles.locationMeta}>이 동네에서 102일째 밍글 중!</Text>
+          <Text style={styles.locationMeta}>현재 여행의 도시를 메인 홈에서 사용합니다.</Text>
         </View>
 
-        <Text style={[styles.sectionTitle, styles.travelSectionTitle]}>여행 기록</Text>
-        <Text style={styles.sectionSubtitle}>최근 3개월간 {trips.length || 3}번의 여행을 함께 했어요!</Text>
+        <View style={styles.tripHeaderRow}>
+          <Text style={[styles.sectionTitle, styles.travelSectionTitle]}>여행 기록</Text>
+          <Pressable style={styles.addTripButton} onPress={() => navigation.navigate("CreateTrip")}>
+            <Text style={styles.addTripButtonText}>새 여행 추가</Text>
+          </Pressable>
+        </View>
+        <Text style={styles.sectionSubtitle}>총 {trips.length}개의 여행</Text>
 
         <View style={styles.tripList}>
-          {(trips.length ? trips : [{ id: "a", title: "일본 오사카", startDate: "2026.03.21", endDate: "2026.03.25" }, { id: "b", title: "상하이", startDate: "2026.03.15", endDate: "2026.03.17" }, { id: "c", title: "싱가포르", startDate: "2026.03.02", endDate: "2026.03.11" }]).slice(0, 3).map((trip) => (
+          {trips.map((trip) => (
             <View key={trip.id} style={styles.tripCard}>
               <View style={styles.tripHead}>
                 <TravelIcon />
@@ -123,6 +108,7 @@ export function MyPage() {
               <Text style={styles.tripMeta}>{formatTripRange(trip.startDate, trip.endDate)}</Text>
             </View>
           ))}
+          {trips.length === 0 ? <Text style={styles.emptyText}>아직 생성된 여행이 없습니다.</Text> : null}
         </View>
 
         <View style={styles.moreRow}>
@@ -166,6 +152,7 @@ const styles = StyleSheet.create({
   tagsRow: {
     flexDirection: "row",
     gap: 8,
+    flexWrap: "wrap",
   },
   tagPill: {
     backgroundColor: "#fff",
@@ -233,6 +220,23 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     fontSize: 30 / 2,
   },
+  tripHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  addTripButton: {
+    backgroundColor: "#1C73F0",
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    height: 28,
+    justifyContent: "center",
+  },
+  addTripButtonText: {
+    color: "#FFF",
+    fontSize: 12,
+    fontWeight: "700",
+  },
   travelSectionTitle: {
     marginTop: 2,
   },
@@ -260,6 +264,10 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#8A8A8A",
     fontWeight: "600",
+  },
+  emptyText: {
+    color: "#888",
+    fontSize: 14,
   },
   moreRow: {
     alignItems: "center",
