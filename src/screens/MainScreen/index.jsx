@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Alert, ImageBackground, Pressable, ScrollView, StyleSheet, Text, TouchableWithoutFeedback, View } from "react-native";
+import { useCallback, useMemo, useState } from "react";
+import { ImageBackground, Pressable, ScrollView, StyleSheet, Text, TouchableWithoutFeedback, View } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
@@ -14,18 +14,17 @@ import { decodeUserIdFromToken } from "../../auth/userId";
 import {
   createSavedCafe,
   createSavedRestaurant,
+  deleteSavedCafe,
+  deleteSavedRestaurant,
   fetchCafeImages,
   fetchCafesByCity,
+  fetchSavedCafes,
+  fetchSavedRestaurants,
   fetchRestaurantImages,
   fetchRestaurantsByCity,
   fetchTrips,
 } from "../../services";
 import { fetchAllCities } from "../../services/placeService";
-import {
-  createQuickMatchSocketClient,
-  subscribeCityQuickMatches,
-  subscribeUserQuickMatches,
-} from "../../services/quickMatchSocketService";
 import { pickCurrentTrip } from "../../utils/trip";
 
 const CHIPS = [
@@ -60,15 +59,13 @@ function ChipRow({ activeId, onSelect }) {
 
 export function MainScreen() {
   const navigation = useNavigation();
-  const { token } = useAuth();
+  const { token, logout } = useAuth();
   const [activeChip, setActiveChip] = useState("restaurant");
   const [currentTrip, setCurrentTrip] = useState(null);
   const [selectedCity, setSelectedCity] = useState(null);
   const [places, setPlaces] = useState([]);
-  const quickMatchSocketClientRef = useRef(null);
-  const cityQuickMatchSubscriptionRef = useRef(null);
-  const userQuickMatchSubscriptionRef = useRef(null);
-  const [quickMatchSocketReady, setQuickMatchSocketReady] = useState(false);
+  const [savedRestaurantByPlaceId, setSavedRestaurantByPlaceId] = useState({});
+  const [savedCafeByPlaceId, setSavedCafeByPlaceId] = useState({});
 
   const userId = useMemo(() => decodeUserIdFromToken(token), [token]);
   const activePlaceType = useMemo(() => {
@@ -104,13 +101,36 @@ export function MainScreen() {
 
   async function loadHome() {
     try {
-      const [allCities, tripsResponse] = await Promise.all([fetchAllCities(), fetchTrips()]);
+      const [allCities, tripsResponse, savedRestaurantsResponse, savedCafesResponse] = await Promise.all([
+        fetchAllCities(),
+        fetchTrips(),
+        fetchSavedRestaurants(),
+        fetchSavedCafes(),
+      ]);
       const userTrips = (tripsResponse?.trips ?? []).filter((trip) => Number(trip?.userId) === Number(userId));
       const trip = pickCurrentTrip(userTrips);
       const city = allCities.find((item) => Number(item?.id) === Number(trip?.cityId)) || null;
+      const savedRestaurantMap = (savedRestaurantsResponse?.savedRestaurants ?? []).reduce((acc, saved) => {
+        const placeId = saved?.restaurant?.id;
+        if (placeId) {
+          acc[placeId] = saved.id;
+        }
+
+        return acc;
+      }, {});
+      const savedCafeMap = (savedCafesResponse?.savedCafes ?? []).reduce((acc, saved) => {
+        const placeId = saved?.cafe?.id;
+        if (placeId) {
+          acc[placeId] = saved.id;
+        }
+
+        return acc;
+      }, {});
 
       setCurrentTrip(trip);
       setSelectedCity(city);
+      setSavedRestaurantByPlaceId(savedRestaurantMap);
+      setSavedCafeByPlaceId(savedCafeMap);
 
       if (!city?.id) {
         setPlaces([]);
@@ -136,6 +156,8 @@ export function MainScreen() {
       setCurrentTrip(null);
       setSelectedCity(null);
       setPlaces([]);
+      setSavedRestaurantByPlaceId({});
+      setSavedCafeByPlaceId({});
     }
   }
 
@@ -145,72 +167,43 @@ export function MainScreen() {
     }, [activePlaceType, userId]),
   );
 
-  useEffect(() => {
-    const client = createQuickMatchSocketClient({
-      onConnect: () => setQuickMatchSocketReady(true),
-      onError: () => setQuickMatchSocketReady(false),
-    });
-
-    quickMatchSocketClientRef.current = client;
-    client.activate();
-
-    return () => {
-      cityQuickMatchSubscriptionRef.current?.unsubscribe();
-      cityQuickMatchSubscriptionRef.current = null;
-      userQuickMatchSubscriptionRef.current?.unsubscribe();
-      userQuickMatchSubscriptionRef.current = null;
-      client.deactivate();
-      quickMatchSocketClientRef.current = null;
-      setQuickMatchSocketReady(false);
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!quickMatchSocketReady || !quickMatchSocketClientRef.current || !selectedCity?.id || !userId) {
-      return;
-    }
-
-    cityQuickMatchSubscriptionRef.current?.unsubscribe();
-    userQuickMatchSubscriptionRef.current?.unsubscribe();
-
-    cityQuickMatchSubscriptionRef.current = subscribeCityQuickMatches(
-      quickMatchSocketClientRef.current,
-      selectedCity.id,
-      (event) => {
-        const targetUserIds = event?.targetUserIds ?? [];
-        const shouldShow = targetUserIds.length === 0 || targetUserIds.some((id) => Number(id) === Number(userId));
-        if (!shouldShow) {
-          return;
-        }
-
-        const typeText = event?.targetType ? `(${event.targetType})` : "";
-        Alert.alert("빠른 매칭 알림", `${event?.eventType || "QUICK_MATCH"} ${typeText}`);
-      },
-    );
-
-    userQuickMatchSubscriptionRef.current = subscribeUserQuickMatches(
-      quickMatchSocketClientRef.current,
-      userId,
-      (event) => {
-        Alert.alert("빠른 매칭 결과", event?.eventType || "QUICK_MATCH_UPDATED");
-      },
-    );
-
-    return () => {
-      cityQuickMatchSubscriptionRef.current?.unsubscribe();
-      cityQuickMatchSubscriptionRef.current = null;
-      userQuickMatchSubscriptionRef.current?.unsubscribe();
-      userQuickMatchSubscriptionRef.current = null;
-    };
-  }, [quickMatchSocketReady, selectedCity?.id, userId]);
-
   async function handleSave(placeId) {
     if (activePlaceType === "cafe") {
-      await createSavedCafe(placeId);
+      const savedCafeId = savedCafeByPlaceId[placeId];
+      if (savedCafeId) {
+        await deleteSavedCafe(savedCafeId);
+        setSavedCafeByPlaceId((prev) => {
+          const next = { ...prev };
+          delete next[placeId];
+          return next;
+        });
+        return;
+      }
+
+      const response = await createSavedCafe(placeId);
+      const saved = response?.savedCafe;
+      if (saved?.cafe?.id && saved?.id) {
+        setSavedCafeByPlaceId((prev) => ({ ...prev, [saved.cafe.id]: saved.id }));
+      }
       return;
     }
 
-    await createSavedRestaurant(placeId);
+    const savedRestaurantId = savedRestaurantByPlaceId[placeId];
+    if (savedRestaurantId) {
+      await deleteSavedRestaurant(savedRestaurantId);
+      setSavedRestaurantByPlaceId((prev) => {
+        const next = { ...prev };
+        delete next[placeId];
+        return next;
+      });
+      return;
+    }
+
+    const response = await createSavedRestaurant(placeId);
+    const saved = response?.savedRestaurant;
+    if (saved?.restaurant?.id && saved?.id) {
+      setSavedRestaurantByPlaceId((prev) => ({ ...prev, [saved.restaurant.id]: saved.id }));
+    }
   }
 
   const visiblePlaces = places.slice(0, 3);
@@ -218,8 +211,13 @@ export function MainScreen() {
   return (
     <ScrollView contentContainerStyle={styles.container}>
       <View style={styles.topIcons}>
+        <Pressable onPress={() => navigation.navigate("ProfileEdit")}>
+          <Person />
+        </Pressable>
+        <Pressable style={styles.logoutMiniButton} onPress={logout}>
+          <Text style={styles.logoutMiniButtonText}>로그아웃</Text>
+        </Pressable>
         <Alarm />
-        <Person />
       </View>
 
       <View style={styles.locationSection}>
@@ -281,7 +279,15 @@ export function MainScreen() {
             >
               <View style={styles.rankBadge}><Text style={styles.rankText}>{idx + 1}</Text></View>
               <Pressable style={styles.bookmarkBtn} hitSlop={12} onPress={() => handleSave(place.id)}>
-                <Ionicons name="bookmark-outline" size={20} color="#ffffff" />
+                <Ionicons
+                  name={
+                    activePlaceType === "cafe"
+                      ? (savedCafeByPlaceId[place.id] ? "bookmark" : "bookmark-outline")
+                      : (savedRestaurantByPlaceId[place.id] ? "bookmark" : "bookmark-outline")
+                  }
+                  size={20}
+                  color="#ffffff"
+                />
               </Pressable>
               <LinearGradient colors={["transparent", "rgba(0,0,0,0.75)"]} style={styles.placeGradient} />
               <View style={styles.placeFooter}>
@@ -321,7 +327,22 @@ const styles = StyleSheet.create({
   topIcons: {
     flexDirection: "row",
     justifyContent: "flex-end",
+    alignItems: "center",
     gap: 14,
+  },
+  logoutMiniButton: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#D5D5D5",
+    backgroundColor: "#FFF",
+    paddingHorizontal: 10,
+    height: 24,
+    justifyContent: "center",
+  },
+  logoutMiniButtonText: {
+    color: "#616161",
+    fontSize: 11,
+    fontWeight: "700",
   },
   locationSection: {
     gap: 6,

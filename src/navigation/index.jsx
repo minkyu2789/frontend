@@ -6,17 +6,19 @@ import HomeIcon from "../icons/home.svg";
 import ChatIcon from "../icons/chat.svg";
 import MyPageIcon from "../icons/mypage.svg";
 import BookMarkIcon from "../icons/bookmark.svg";
-import { MainScreen } from "../screens/MainScreen";
-import { Chats } from "../screens/Chats";
-import { MyPage } from "../screens/MyPage";
-import { BookMark } from "../screens/BookMark";
-import { Nearby } from "../screens/Nearby";
-import { QuickMatch } from "../screens/QuickMatch";
-import { NotFound } from "../screens/NotFound";
+import { MainScreen } from "../screens/MainScreen/index.jsx";
+import { Chats } from "../screens/Chats/index.jsx";
+import { MyPage } from "../screens/MyPage/index.jsx";
+import { BookMark } from "../screens/BookMark/index.jsx";
+import { Nearby } from "../screens/Nearby/index.jsx";
+import { QuickMatch } from "../screens/QuickMatch/index.jsx";
+import { NotFound } from "../screens/NotFound/index.jsx";
 import { CreateTrip } from "../screens/CreateTrip";
+import { ProfileEdit } from "../screens/ProfileEdit";
 import { LoginScreen } from "../screens/Auth/Login";
 import { SignUpScreen } from "../screens/Auth/SignUp";
 import { useAuth } from "../auth";
+import { QuickMatchAlertListener } from "../realtime/QuickMatchAlertListener";
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
@@ -81,6 +83,7 @@ function AppStack() {
       <Stack.Screen name="Nearby" component={Nearby} />
       <Stack.Screen name="QuickMatch" component={QuickMatch} />
       <Stack.Screen name="CreateTrip" component={CreateTrip} />
+      <Stack.Screen name="ProfileEdit" component={ProfileEdit} />
       <Stack.Screen
         name="NotFound"
         component={NotFound}
@@ -107,5 +110,10 @@ export function Navigation() {
     return <BootSplash />;
   }
 
-  return <NavigationContainer>{isAuthenticated ? <AppStack /> : <AuthStack />}</NavigationContainer>;
+  return (
+    <>
+      {isAuthenticated ? <QuickMatchAlertListener /> : null}
+      <NavigationContainer>{isAuthenticated ? <AppStack /> : <AuthStack />}</NavigationContainer>
+    </>
+  );
 }

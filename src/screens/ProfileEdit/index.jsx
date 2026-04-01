@@ -1,8 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
-import { SearchDropdown } from "../../../components/SearchDropdown";
-import { useAuth } from "../../../auth";
-import { fetchNationalities } from "../../../services";
+import { Ionicons } from "@expo/vector-icons";
+import { SearchDropdown } from "../../components/SearchDropdown";
+import { useAuth } from "../../auth";
+import { decodeUserIdFromToken } from "../../auth/userId";
+import { fetchNationalities, fetchUser, updateUser } from "../../services";
 
 function normalizeLiteral(value) {
   return String(value || "").trim().toLowerCase();
@@ -18,11 +20,11 @@ function getNationalitySearchText(nationality) {
     .join(" ");
 }
 
-export function SignUpScreen({ navigation }) {
-  const { signup, login } = useAuth();
+export function ProfileEdit({ navigation }) {
+  const { token, logout } = useAuth();
+  const userId = useMemo(() => decodeUserIdFromToken(token), [token]);
+  const [nationalities, setNationalities] = useState([]);
   const [form, setForm] = useState({
-    username: "",
-    password: "",
     name: "",
     email: "",
     phone: "",
@@ -31,30 +33,41 @@ export function SignUpScreen({ navigation }) {
   });
   const [nationalityQuery, setNationalityQuery] = useState("");
   const [selectedNationality, setSelectedNationality] = useState(null);
-  const [nationalities, setNationalities] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
   function updateField(key, value) {
-    setForm((previous) => ({
-      ...previous,
-      [key]: value,
-    }));
+    setForm((prev) => ({ ...prev, [key]: value }));
   }
 
   useEffect(() => {
-    async function loadNationalities() {
+    async function load() {
       try {
-        const response = await fetchNationalities();
-        const loaded = response?.nationalities ?? [];
-        setNationalities(loaded);
+        const [userResponse, nationalityResponse] = await Promise.all([
+          fetchUser(userId),
+          fetchNationalities(),
+        ]);
+        const user = userResponse?.user;
+        const loadedNationalities = nationalityResponse?.nationalities ?? [];
+        const matchedNationality = loadedNationalities.find((item) => Number(item?.id) === Number(user?.nationalityId)) || null;
+
+        setForm({
+          name: user?.name || "",
+          email: user?.email || "",
+          phone: user?.phone || "",
+          sex: user?.sex || "",
+          introduction: user?.introduction || "",
+        });
+        setNationalities(loadedNationalities);
+        setSelectedNationality(matchedNationality);
+        setNationalityQuery(matchedNationality ? getNationalityDisplayName(matchedNationality) : "");
       } catch {
-        setNationalities([]);
+        setError("사용자 정보를 불러오지 못했습니다.");
       }
     }
 
-    loadNationalities();
-  }, []);
+    load();
+  }, [userId]);
 
   function handleNationalityQueryChange(nextQuery) {
     setNationalityQuery(nextQuery);
@@ -68,55 +81,54 @@ export function SignUpScreen({ navigation }) {
     setSelectedNationality(exactMatched);
   }
 
-  async function handleSignUp() {
-    const requiredKeys = ["username", "password", "name", "email", "phone", "sex"];
-    const missing = requiredKeys.some((key) => !form[key]?.trim());
-
-    if (missing) {
-      setError("username, password, name, email, phone, sex are required.");
-      return;
-    }
-
-    if (!selectedNationality?.id) {
-      setError("국적을 목록에서 선택해주세요.");
+  async function handleSave() {
+    if (!form.name.trim() || !form.email.trim() || !form.phone.trim()) {
+      setError("이름, 이메일, 전화번호를 입력해주세요.");
       return;
     }
 
     setLoading(true);
     setError(null);
-
     try {
-      await signup({
-        username: form.username.trim(),
-        password: form.password,
+      await updateUser(userId, {
         name: form.name.trim(),
         email: form.email.trim(),
         phone: form.phone.trim(),
-        sex: form.sex.trim(),
-        introduction: form.introduction?.trim() ? form.introduction.trim() : null,
-        nationalityId: selectedNationality.id,
-        keywordIds: [],
+        sex: form.sex || null,
+        introduction: form.introduction?.trim() || null,
+        nationalityId: selectedNationality?.id || null,
       });
-
-      await login(form.username.trim(), form.password);
+      navigation.goBack();
     } catch (requestError) {
-      setError(requestError?.message ?? "Sign up failed.");
+      setError(requestError?.message || "프로필 저장에 실패했습니다.");
     } finally {
       setLoading(false);
     }
   }
 
+  async function handleLogout() {
+    await logout();
+  }
+
   return (
     <ScrollView contentContainerStyle={styles.container}>
-      <Text style={styles.title}>회원가입</Text>
-      <Text style={styles.subtitle}>Figma 인증 화면 추가 전 임시 인증 UI입니다.</Text>
+      <View style={styles.header}>
+        <Pressable onPress={() => navigation.goBack()}>
+          <Ionicons name="chevron-back" size={24} color="#111" />
+        </Pressable>
+        <Text style={styles.headerTitle}>내 정보 수정</Text>
+        <View style={{ width: 24 }} />
+      </View>
 
-      <View style={styles.form}>
-        <Field label="Username" value={form.username} onChangeText={(v) => updateField("username", v)} />
-        <Field label="Password" value={form.password} onChangeText={(v) => updateField("password", v)} secureTextEntry />
-        <Field label="Name" value={form.name} onChangeText={(v) => updateField("name", v)} />
-        <Field label="Email" value={form.email} onChangeText={(v) => updateField("email", v)} />
-        <Field label="Phone" value={form.phone} onChangeText={(v) => updateField("phone", v)} />
+      <View style={styles.formCard}>
+        <Text style={styles.label}>Name</Text>
+        <TextInput style={styles.input} value={form.name} onChangeText={(v) => updateField("name", v)} />
+
+        <Text style={styles.label}>Email</Text>
+        <TextInput style={styles.input} value={form.email} onChangeText={(v) => updateField("email", v)} autoCapitalize="none" />
+
+        <Text style={styles.label}>Phone</Text>
+        <TextInput style={styles.input} value={form.phone} onChangeText={(v) => updateField("phone", v)} />
 
         <Text style={styles.label}>Nationality</Text>
         <SearchDropdown
@@ -131,7 +143,6 @@ export function SignUpScreen({ navigation }) {
           onSelectItem={(nationality) => {
             setSelectedNationality(nationality);
             setNationalityQuery(getNationalityDisplayName(nationality));
-            setError(null);
           }}
           emptyText="일치하는 국가가 없습니다."
         />
@@ -142,48 +153,34 @@ export function SignUpScreen({ navigation }) {
             style={[styles.sexButton, form.sex === "MALE" && styles.sexButtonActive]}
             onPress={() => updateField("sex", "MALE")}
           >
-            <Text style={[styles.sexButtonText, form.sex === "MALE" && styles.sexButtonTextActive]}>MALE</Text>
+            <Text style={[styles.sexText, form.sex === "MALE" && styles.sexTextActive]}>MALE</Text>
           </Pressable>
           <Pressable
             style={[styles.sexButton, form.sex === "FEMALE" && styles.sexButtonActive]}
             onPress={() => updateField("sex", "FEMALE")}
           >
-            <Text style={[styles.sexButtonText, form.sex === "FEMALE" && styles.sexButtonTextActive]}>FEMALE</Text>
+            <Text style={[styles.sexText, form.sex === "FEMALE" && styles.sexTextActive]}>FEMALE</Text>
           </Pressable>
         </View>
 
-        <Field
-          label="Introduction (optional)"
+        <Text style={styles.label}>Introduction</Text>
+        <TextInput
+          style={[styles.input, styles.textArea]}
           value={form.introduction}
           onChangeText={(v) => updateField("introduction", v)}
           multiline
         />
 
-        {error ? <Text style={styles.error}>{error}</Text> : null}
+        {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
-        <Pressable style={styles.primaryBtn} onPress={handleSignUp} disabled={loading}>
-          <Text style={styles.primaryBtnText}>{loading ? "가입 중..." : "회원가입"}</Text>
+        <Pressable style={[styles.saveButton, loading && styles.saveButtonDisabled]} onPress={handleSave} disabled={loading}>
+          <Text style={styles.saveButtonText}>{loading ? "저장 중..." : "저장"}</Text>
         </Pressable>
-
-        <Pressable style={styles.secondaryBtn} onPress={() => navigation.goBack()}>
-          <Text style={styles.secondaryBtnText}>로그인으로 돌아가기</Text>
+        <Pressable style={styles.logoutButton} onPress={handleLogout}>
+          <Text style={styles.logoutButtonText}>로그아웃</Text>
         </Pressable>
       </View>
     </ScrollView>
-  );
-}
-
-function Field({ label, ...inputProps }) {
-  return (
-    <>
-      <Text style={styles.label}>{label}</Text>
-      <TextInput
-        style={[styles.input, inputProps.multiline && styles.textArea]}
-        autoCapitalize="none"
-        placeholder={inputProps.placeholder || label}
-        {...inputProps}
-      />
-    </>
   );
 }
 
@@ -192,21 +189,21 @@ const styles = StyleSheet.create({
     backgroundColor: "#F5F6F8",
     minHeight: "100%",
     paddingHorizontal: 20,
-    paddingTop: 64,
-    paddingBottom: 30,
+    paddingTop: 52,
+    paddingBottom: 24,
     gap: 10,
   },
-  title: {
-    fontSize: 26,
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  headerTitle: {
+    fontSize: 20,
     fontWeight: "700",
     color: "#111",
   },
-  subtitle: {
-    fontSize: 14,
-    color: "#666",
-  },
-  form: {
-    marginTop: 6,
+  formCard: {
     backgroundColor: "#FFF",
     borderRadius: 14,
     padding: 14,
@@ -247,37 +244,40 @@ const styles = StyleSheet.create({
     borderColor: "#0169FE",
     backgroundColor: "#EAF2FF",
   },
-  sexButtonText: {
+  sexText: {
     color: "#666",
     fontWeight: "700",
   },
-  sexButtonTextActive: {
+  sexTextActive: {
     color: "#0169FE",
   },
-  error: {
+  errorText: {
     color: "#C62828",
     fontSize: 13,
   },
-  primaryBtn: {
+  saveButton: {
     marginTop: 4,
     backgroundColor: "#0169FE",
     borderRadius: 10,
     alignItems: "center",
     paddingVertical: 10,
   },
-  primaryBtnText: {
+  saveButtonDisabled: {
+    opacity: 0.6,
+  },
+  saveButtonText: {
     color: "#FFF",
     fontWeight: "700",
   },
-  secondaryBtn: {
+  logoutButton: {
     borderWidth: 1,
-    borderColor: "#0169FE",
+    borderColor: "#D32F2F",
     borderRadius: 10,
     alignItems: "center",
     paddingVertical: 10,
   },
-  secondaryBtnText: {
-    color: "#0169FE",
+  logoutButtonText: {
+    color: "#D32F2F",
     fontWeight: "700",
   },
 });
