@@ -1,6 +1,11 @@
+import { ActivityIndicator, View } from "react-native";
+import { NavigationContainer } from "@react-navigation/native";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
-import { createStaticNavigation } from "@react-navigation/native";
+import HomeIcon from "../icons/home.svg";
+import ChatIcon from "../icons/chat.svg";
+import MyPageIcon from "../icons/mypage.svg";
+import BookMarkIcon from "../icons/bookmark.svg";
 import { MainScreen } from "../screens/MainScreen";
 import { Chats } from "../screens/Chats";
 import { MyPage } from "../screens/MyPage";
@@ -8,70 +13,97 @@ import { BookMark } from "../screens/BookMark";
 import { Nearby } from "../screens/Nearby";
 import { QuickMatch } from "../screens/QuickMatch";
 import { NotFound } from "../screens/NotFound";
+import { LoginScreen } from "../screens/Auth/Login";
+import { SignUpScreen } from "../screens/Auth/SignUp";
+import { useAuth } from "../auth";
 
-import HomeIcon from "../icons/home.svg";
-import ChatIcon from "../icons/chat.svg";
-import MyPageIcon from "../icons/mypage.svg";
-import BookMarkIcon from "../icons/bookmark.svg";
+const Tab = createBottomTabNavigator();
+const Stack = createNativeStackNavigator();
 
-const Tabs = createBottomTabNavigator({
-    screenOptions: {
+function TabsNavigator() {
+  return (
+    <Tab.Navigator
+      screenOptions={{
         headerShown: false,
-        tabBarStyle: { backgroundColor: '#fff', paddingTop: 4 },
-    },
-    screens: {
-        MainScreen: {
-            screen: MainScreen,
-            options: {
-                title: '홈',
-                tabBarIcon: ({ color }) => <HomeIcon color={color} />,
-            },
-        },
-        Chats: {
-            screen: Chats,
-            options: {
-                title: '채팅',
-                tabBarIcon: ({ color }) => <ChatIcon color={color} />,
-            },
-        },
-        MyPage: {
-            screen: MyPage,
-            options: {
-                title: '나의 여행',
-                tabBarIcon: ({ color }) => <MyPageIcon color={color} />,
-            },
-        },
-        BookMark: {
-            screen: BookMark,
-            options: {
-                title: '저장',
-                tabBarIcon: ({ color }) => <BookMarkIcon color={color} />,
-            },
-        },
-    },
-});
+        tabBarStyle: { backgroundColor: "#fff", paddingTop: 4 },
+      }}
+    >
+      <Tab.Screen
+        name="MainScreen"
+        component={MainScreen}
+        options={{
+          title: "홈",
+          tabBarIcon: ({ color }) => <HomeIcon color={color} />,
+        }}
+      />
+      <Tab.Screen
+        name="Chats"
+        component={Chats}
+        options={{
+          title: "채팅",
+          tabBarIcon: ({ color }) => <ChatIcon color={color} />,
+        }}
+      />
+      <Tab.Screen
+        name="MyPage"
+        component={MyPage}
+        options={{
+          title: "나의 여행",
+          tabBarIcon: ({ color }) => <MyPageIcon color={color} />,
+        }}
+      />
+      <Tab.Screen
+        name="BookMark"
+        component={BookMark}
+        options={{
+          title: "저장",
+          tabBarIcon: ({ color }) => <BookMarkIcon color={color} />,
+        }}
+      />
+    </Tab.Navigator>
+  );
+}
 
-const RootStack = createNativeStackNavigator({
-    screenOptions: {
-        headerShown: false,
-    },
-    screens: {
-        Tabs: {
-            screen: Tabs,
-        },
-        Nearby: {
-            screen: Nearby,
-        },
-        QuickMatch: {
-            screen: QuickMatch,
-        },
-        NotFound: {
-            screen: NotFound,
-            options: {
-                title: '404',
-            },
-        }
-    },
-});
+function AuthStack() {
+  return (
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="Login" component={LoginScreen} />
+      <Stack.Screen name="SignUp" component={SignUpScreen} />
+    </Stack.Navigator>
+  );
+}
 
-export const Navigation = createStaticNavigation(RootStack);
+function AppStack() {
+  return (
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="Tabs" component={TabsNavigator} />
+      <Stack.Screen name="Nearby" component={Nearby} />
+      <Stack.Screen name="QuickMatch" component={QuickMatch} />
+      <Stack.Screen
+        name="NotFound"
+        component={NotFound}
+        options={{
+          title: "404",
+        }}
+      />
+    </Stack.Navigator>
+  );
+}
+
+function BootSplash() {
+  return (
+    <View style={{ flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: "#F5F6F8" }}>
+      <ActivityIndicator size="large" color="#0169FE" />
+    </View>
+  );
+}
+
+export function Navigation() {
+  const { isAuthenticated, isBootstrapping } = useAuth();
+
+  if (isBootstrapping) {
+    return <BootSplash />;
+  }
+
+  return <NavigationContainer>{isAuthenticated ? <AppStack /> : <AuthStack />}</NavigationContainer>;
+}
