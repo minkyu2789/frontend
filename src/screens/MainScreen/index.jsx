@@ -14,8 +14,12 @@ import { decodeUserIdFromToken } from "../../auth/userId";
 import {
   createSavedCafe,
   createSavedRestaurant,
+  deleteSavedCafe,
+  deleteSavedRestaurant,
   fetchCafeImages,
   fetchCafesByCity,
+  fetchSavedCafes,
+  fetchSavedRestaurants,
   fetchRestaurantImages,
   fetchRestaurantsByCity,
   fetchTrips,
@@ -60,6 +64,8 @@ export function MainScreen() {
   const [currentTrip, setCurrentTrip] = useState(null);
   const [selectedCity, setSelectedCity] = useState(null);
   const [places, setPlaces] = useState([]);
+  const [savedRestaurantByPlaceId, setSavedRestaurantByPlaceId] = useState({});
+  const [savedCafeByPlaceId, setSavedCafeByPlaceId] = useState({});
 
   const userId = useMemo(() => decodeUserIdFromToken(token), [token]);
   const activePlaceType = useMemo(() => {
@@ -95,13 +101,36 @@ export function MainScreen() {
 
   async function loadHome() {
     try {
-      const [allCities, tripsResponse] = await Promise.all([fetchAllCities(), fetchTrips()]);
+      const [allCities, tripsResponse, savedRestaurantsResponse, savedCafesResponse] = await Promise.all([
+        fetchAllCities(),
+        fetchTrips(),
+        fetchSavedRestaurants(),
+        fetchSavedCafes(),
+      ]);
       const userTrips = (tripsResponse?.trips ?? []).filter((trip) => Number(trip?.userId) === Number(userId));
       const trip = pickCurrentTrip(userTrips);
       const city = allCities.find((item) => Number(item?.id) === Number(trip?.cityId)) || null;
+      const savedRestaurantMap = (savedRestaurantsResponse?.savedRestaurants ?? []).reduce((acc, saved) => {
+        const placeId = saved?.restaurant?.id;
+        if (placeId) {
+          acc[placeId] = saved.id;
+        }
+
+        return acc;
+      }, {});
+      const savedCafeMap = (savedCafesResponse?.savedCafes ?? []).reduce((acc, saved) => {
+        const placeId = saved?.cafe?.id;
+        if (placeId) {
+          acc[placeId] = saved.id;
+        }
+
+        return acc;
+      }, {});
 
       setCurrentTrip(trip);
       setSelectedCity(city);
+      setSavedRestaurantByPlaceId(savedRestaurantMap);
+      setSavedCafeByPlaceId(savedCafeMap);
 
       if (!city?.id) {
         setPlaces([]);
@@ -127,6 +156,8 @@ export function MainScreen() {
       setCurrentTrip(null);
       setSelectedCity(null);
       setPlaces([]);
+      setSavedRestaurantByPlaceId({});
+      setSavedCafeByPlaceId({});
     }
   }
 
@@ -138,11 +169,41 @@ export function MainScreen() {
 
   async function handleSave(placeId) {
     if (activePlaceType === "cafe") {
-      await createSavedCafe(placeId);
+      const savedCafeId = savedCafeByPlaceId[placeId];
+      if (savedCafeId) {
+        await deleteSavedCafe(savedCafeId);
+        setSavedCafeByPlaceId((prev) => {
+          const next = { ...prev };
+          delete next[placeId];
+          return next;
+        });
+        return;
+      }
+
+      const response = await createSavedCafe(placeId);
+      const saved = response?.savedCafe;
+      if (saved?.cafe?.id && saved?.id) {
+        setSavedCafeByPlaceId((prev) => ({ ...prev, [saved.cafe.id]: saved.id }));
+      }
       return;
     }
 
-    await createSavedRestaurant(placeId);
+    const savedRestaurantId = savedRestaurantByPlaceId[placeId];
+    if (savedRestaurantId) {
+      await deleteSavedRestaurant(savedRestaurantId);
+      setSavedRestaurantByPlaceId((prev) => {
+        const next = { ...prev };
+        delete next[placeId];
+        return next;
+      });
+      return;
+    }
+
+    const response = await createSavedRestaurant(placeId);
+    const saved = response?.savedRestaurant;
+    if (saved?.restaurant?.id && saved?.id) {
+      setSavedRestaurantByPlaceId((prev) => ({ ...prev, [saved.restaurant.id]: saved.id }));
+    }
   }
 
   const visiblePlaces = places.slice(0, 3);
@@ -213,7 +274,15 @@ export function MainScreen() {
             >
               <View style={styles.rankBadge}><Text style={styles.rankText}>{idx + 1}</Text></View>
               <Pressable style={styles.bookmarkBtn} hitSlop={12} onPress={() => handleSave(place.id)}>
-                <Ionicons name="bookmark-outline" size={20} color="#ffffff" />
+                <Ionicons
+                  name={
+                    activePlaceType === "cafe"
+                      ? (savedCafeByPlaceId[place.id] ? "bookmark" : "bookmark-outline")
+                      : (savedRestaurantByPlaceId[place.id] ? "bookmark" : "bookmark-outline")
+                  }
+                  size={20}
+                  color="#ffffff"
+                />
               </Pressable>
               <LinearGradient colors={["transparent", "rgba(0,0,0,0.75)"]} style={styles.placeGradient} />
               <View style={styles.placeFooter}>
