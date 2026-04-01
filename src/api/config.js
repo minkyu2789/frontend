@@ -9,4 +9,13 @@ export function getApiBaseUrl() {
   return DEFAULT_API_BASE_URL;
 }
 
+export function getChatWebSocketUrl() {
+  const base = getApiBaseUrl();
+  if (base.startsWith('https://')) {
+    return `${base.replace('https://', 'wss://')}/ws-chat`;
+  }
+
+  return `${base.replace('http://', 'ws://')}/ws-chat`;
+}
+
 export const API_TIMEOUT_MS = 15000;
