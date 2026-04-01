@@ -1,14 +1,13 @@
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { createStaticNavigation } from "@react-navigation/native";
-import { MainScreen } from "./screens/MainScreen";
-import { Chats } from "./screens/Chats";
-import { MyPage } from "./screens/MyPage";
-import { BookMark } from "./screens/BookMark";
-import { Nearby } from "./screens/Nearby";
-import { QuickMatch } from "./screens/QuickMatch";
-import { NotFound } from "./screens/NotFound";
-import { StyleSheet } from "react-native";
+import { MainScreen } from "../screens/MainScreen";
+import { Chats } from "../screens/Chats";
+import { MyPage } from "../screens/MyPage";
+import { BookMark } from "../screens/BookMark";
+import { Nearby } from "../screens/Nearby";
+import { QuickMatch } from "../screens/QuickMatch";
+import { NotFound } from "../screens/NotFound";
 
 import HomeIcon from "../icons/home.svg";
 import ChatIcon from "../icons/chat.svg";
