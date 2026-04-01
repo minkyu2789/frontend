@@ -28,6 +28,7 @@ function normalizeHeaders(headers = {}) {
   const token = getAccessToken();
   if (token) {
     merged.accessToken = token;
+    merged.Authorization = `Bearer ${token}`;
   }
 
   return merged;
