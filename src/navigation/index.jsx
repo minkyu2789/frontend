@@ -17,6 +17,7 @@ import { CreateTrip } from "../screens/CreateTrip";
 import { LoginScreen } from "../screens/Auth/Login";
 import { SignUpScreen } from "../screens/Auth/SignUp";
 import { useAuth } from "../auth";
+import { QuickMatchAlertListener } from "../realtime/QuickMatchAlertListener";
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
@@ -107,5 +108,10 @@ export function Navigation() {
     return <BootSplash />;
   }
 
-  return <NavigationContainer>{isAuthenticated ? <AppStack /> : <AuthStack />}</NavigationContainer>;
+  return (
+    <>
+      {isAuthenticated ? <QuickMatchAlertListener /> : null}
+      <NavigationContainer>{isAuthenticated ? <AppStack /> : <AuthStack />}</NavigationContainer>
+    </>
+  );
 }
