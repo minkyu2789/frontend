@@ -1,5 +1,5 @@
 import { StyleSheet, Text, TouchableWithoutFeedback, View } from "react-native";
-import GoBack from '../../images/goback.svg';
+import GoBack from '../../icons/goback.svg';
 import { useNavigation } from "@react-navigation/native";
 
 export function QuickMatch() {

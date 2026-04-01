@@ -1,11 +1,11 @@
 import { ImageBackground, Pressable, ScrollView, StyleSheet, Text, TouchableWithoutFeedback, View } from "react-native";
-import Person from '../../images/person.svg';
-import Alarm from '../../images/alarm.svg';
-import Now from '../../images/state.svg';
-import Position from '../../images/position.svg';
-import Direction from '../../images/direction.svg';
-import Quick from '../../images/quick.svg';
-import Speech from '../../images/speech.svg';
+import Person from '../../icons/person.svg';
+import Alarm from '../../icons/alarm.svg';
+import Now from '../../icons/state.svg';
+import Position from '../../icons/position.svg';
+import Direction from '../../icons/direction.svg';
+import Quick from '../../icons/quick.svg';
+import Speech from '../../icons/speech.svg';
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from '@expo/vector-icons';
 import { useState } from "react";

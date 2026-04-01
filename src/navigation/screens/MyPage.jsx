@@ -1,9 +1,9 @@
 import { StatusBar } from "expo-status-bar";
 import { ScrollView, StyleSheet, Text, TouchableWithoutFeedback, View } from "react-native";
-import Info from '../../images/info.svg';
-import TravelIcon from '../../images/travelIcon.svg';
-import More from '../../images/more.svg';
-import DirectionBlack from '../../images/direction_black.svg';
+import Info from '../../icons/info.svg';
+import TravelIcon from '../../icons/travelIcon.svg';
+import More from '../../icons/more.svg';
+import DirectionBlack from '../../icons/direction_black.svg';
 
 export function MyPage() {
     return (
