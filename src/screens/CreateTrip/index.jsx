@@ -1,0 +1,217 @@
+import { useEffect, useMemo, useState } from "react";
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import { createTrip } from "../../services/tripService";
+import { fetchAllCities } from "../../services/placeService";
+
+export function CreateTrip({ navigation }) {
+  const [title, setTitle] = useState("");
+  const [cityQuery, setCityQuery] = useState("");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+  const [cities, setCities] = useState([]);
+  const [selectedCity, setSelectedCity] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    async function loadCities() {
+      try {
+        const loadedCities = await fetchAllCities();
+        setCities(loadedCities);
+      } catch {
+        setCities([]);
+      }
+    }
+
+    loadCities();
+  }, []);
+
+  const filteredCities = useMemo(() => {
+    const query = cityQuery.trim().toLowerCase();
+    if (!query) {
+      return cities.slice(0, 20);
+    }
+
+    return cities
+      .filter((city) => city?.name?.toLowerCase().includes(query))
+      .slice(0, 20);
+  }, [cities, cityQuery]);
+
+  async function handleCreateTrip() {
+    if (!title.trim() || !selectedCity?.id || !startDate.trim() || !endDate.trim()) {
+      setError("제목, 도시, 시작일, 종료일을 모두 입력해주세요.");
+      return;
+    }
+
+    setSubmitting(true);
+    setError(null);
+    try {
+      await createTrip({
+        title: title.trim(),
+        cityId: selectedCity.id,
+        startDate: startDate.trim(),
+        endDate: endDate.trim(),
+      });
+      navigation.goBack();
+    } catch (requestError) {
+      setError(requestError?.message ?? "여행 생성에 실패했습니다.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <ScrollView contentContainerStyle={styles.container}>
+      <View style={styles.header}>
+        <Pressable onPress={() => navigation.goBack()}>
+          <Ionicons name="chevron-back" size={24} color="#111" />
+        </Pressable>
+        <Text style={styles.headerTitle}>새 여행 추가</Text>
+        <View style={{ width: 24 }} />
+      </View>
+
+      <View style={styles.formCard}>
+        <Text style={styles.label}>여행 제목</Text>
+        <TextInput
+          style={styles.input}
+          value={title}
+          onChangeText={setTitle}
+          placeholder="예: 오사카 미식 투어"
+        />
+
+        <Text style={styles.label}>도시 검색</Text>
+        <TextInput
+          style={styles.input}
+          value={cityQuery}
+          onChangeText={setCityQuery}
+          placeholder="도시명을 입력하세요"
+        />
+
+        <View style={styles.cityList}>
+          {filteredCities.map((city) => {
+            const active = selectedCity?.id === city.id;
+            return (
+              <Pressable
+                key={city.id}
+                style={[styles.cityItem, active && styles.cityItemActive]}
+                onPress={() => setSelectedCity(city)}
+              >
+                <Text style={[styles.cityItemText, active && styles.cityItemTextActive]}>{city.name}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
+
+        <Text style={styles.label}>시작일 (YYYY-MM-DD)</Text>
+        <TextInput
+          style={styles.input}
+          value={startDate}
+          onChangeText={setStartDate}
+          placeholder="2026-04-01"
+          autoCapitalize="none"
+        />
+
+        <Text style={styles.label}>종료일 (YYYY-MM-DD)</Text>
+        <TextInput
+          style={styles.input}
+          value={endDate}
+          onChangeText={setEndDate}
+          placeholder="2026-04-05"
+          autoCapitalize="none"
+        />
+
+        {error ? <Text style={styles.errorText}>{error}</Text> : null}
+
+        <Pressable style={[styles.createButton, submitting && styles.createButtonDisabled]} onPress={handleCreateTrip} disabled={submitting}>
+          <Text style={styles.createButtonText}>{submitting ? "생성 중..." : "여행 생성"}</Text>
+        </Pressable>
+      </View>
+    </ScrollView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    backgroundColor: "#F1F2F5",
+    minHeight: "100%",
+    paddingTop: 52,
+    paddingHorizontal: 20,
+    paddingBottom: 20,
+    gap: 10,
+  },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: "#111",
+  },
+  formCard: {
+    backgroundColor: "#FFF",
+    borderRadius: 16,
+    padding: 14,
+    gap: 8,
+  },
+  label: {
+    fontSize: 13,
+    color: "#666",
+    fontWeight: "600",
+  },
+  input: {
+    borderWidth: 1,
+    borderColor: "#D5D5D5",
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    backgroundColor: "#FFF",
+  },
+  cityList: {
+    maxHeight: 180,
+    gap: 6,
+    marginBottom: 2,
+  },
+  cityItem: {
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#E4E4E4",
+    paddingVertical: 9,
+    paddingHorizontal: 12,
+    backgroundColor: "#F7F7F8",
+  },
+  cityItemActive: {
+    backgroundColor: "#1C73F0",
+    borderColor: "#1C73F0",
+  },
+  cityItemText: {
+    color: "#444",
+    fontSize: 14,
+  },
+  cityItemTextActive: {
+    color: "#FFF",
+    fontWeight: "700",
+  },
+  errorText: {
+    color: "#C62828",
+    fontSize: 13,
+  },
+  createButton: {
+    marginTop: 8,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: "#1C73F0",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  createButtonDisabled: {
+    opacity: 0.6,
+  },
+  createButtonText: {
+    color: "#FFF",
+    fontSize: 16,
+    fontWeight: "700",
+  },
+});
