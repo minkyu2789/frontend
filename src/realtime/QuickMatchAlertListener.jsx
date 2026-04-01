@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Alert, AppState } from "react-native";
+import { AppState, Pressable, StyleSheet, Text, View } from "react-native";
 import { useAuth } from "../auth";
 import { decodeUserIdFromToken } from "../auth/userId";
 import { fetchTrips } from "../services";
@@ -36,10 +36,13 @@ export function QuickMatchAlertListener() {
   const userId = useMemo(() => toNumberOrNull(decodeUserIdFromToken(token)), [token]);
   const [socketReady, setSocketReady] = useState(false);
   const [currentCityId, setCurrentCityId] = useState(null);
+  const [bannerMessage, setBannerMessage] = useState(null);
+  const [bannerVisible, setBannerVisible] = useState(false);
   const clientRef = useRef(null);
   const citySubscriptionRef = useRef(null);
   const userSubscriptionRef = useRef(null);
   const lastNotificationAtRef = useRef({});
+  const bannerTimerRef = useRef(null);
 
   const shouldNotify = useCallback((event) => {
     const quickMatchId = event?.quickMatch?.id;
@@ -53,6 +56,23 @@ export function QuickMatchAlertListener() {
 
     lastNotificationAtRef.current[key] = now;
     return true;
+  }, []);
+
+  const showInAppBanner = useCallback((message) => {
+    if (!message) {
+      return;
+    }
+
+    setBannerMessage(message);
+    setBannerVisible(true);
+    if (bannerTimerRef.current) {
+      clearTimeout(bannerTimerRef.current);
+    }
+
+    bannerTimerRef.current = setTimeout(() => {
+      setBannerVisible(false);
+      setBannerMessage(null);
+    }, 4200);
   }, []);
 
   const loadCurrentCityId = useCallback(async () => {
@@ -92,6 +112,9 @@ export function QuickMatchAlertListener() {
       client.deactivate();
       clientRef.current = null;
       setSocketReady(false);
+      if (bannerTimerRef.current) {
+        clearTimeout(bannerTimerRef.current);
+      }
     };
   }, [userId]);
 
@@ -122,14 +145,14 @@ export function QuickMatchAlertListener() {
         return;
       }
 
-      Alert.alert("빠른 매칭", getEventMessage(event?.eventType));
+      showInAppBanner(getEventMessage(event?.eventType));
     });
 
     return () => {
       userSubscriptionRef.current?.unsubscribe();
       userSubscriptionRef.current = null;
     };
-  }, [socketReady, userId, shouldNotify]);
+  }, [socketReady, userId, shouldNotify, showInAppBanner]);
 
   useEffect(() => {
     if (!socketReady || !clientRef.current || !userId || !currentCityId) {
@@ -144,14 +167,59 @@ export function QuickMatchAlertListener() {
         return;
       }
 
-      Alert.alert("빠른 매칭", getEventMessage(event?.eventType));
+      showInAppBanner(getEventMessage(event?.eventType));
     });
 
     return () => {
       citySubscriptionRef.current?.unsubscribe();
       citySubscriptionRef.current = null;
     };
-  }, [socketReady, userId, currentCityId, shouldNotify]);
+  }, [socketReady, userId, currentCityId, shouldNotify, showInAppBanner]);
 
-  return null;
+  if (!bannerVisible || !bannerMessage) {
+    return null;
+  }
+
+  return (
+    <View pointerEvents="box-none" style={styles.overlay}>
+      <Pressable style={styles.banner} onPress={() => setBannerVisible(false)}>
+        <Text style={styles.bannerTitle}>빠른 매칭 알림</Text>
+        <Text style={styles.bannerBody}>{bannerMessage}</Text>
+      </Pressable>
+    </View>
+  );
 }
+
+const styles = StyleSheet.create({
+  overlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 9999,
+    paddingHorizontal: 14,
+    paddingTop: 56,
+  },
+  banner: {
+    borderRadius: 14,
+    backgroundColor: "#111827",
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  bannerTitle: {
+    color: "#FFFFFF",
+    fontSize: 13,
+    fontWeight: "700",
+    marginBottom: 2,
+  },
+  bannerBody: {
+    color: "#E5E7EB",
+    fontSize: 12,
+    lineHeight: 17,
+  },
+});
