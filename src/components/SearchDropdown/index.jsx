@@ -14,6 +14,7 @@ export function SearchDropdown({
   onSelectItem,
   getItemKey,
   getItemLabel,
+  getItemSearchText,
   emptyText = "검색 결과가 없습니다.",
 }) {
   const [isFocused, setIsFocused] = useState(false);
@@ -25,9 +26,12 @@ export function SearchDropdown({
     }
 
     return (items || [])
-      .filter((item) => normalize(getItemLabel(item)).includes(query))
+      .filter((item) => {
+        const searchText = getItemSearchText ? getItemSearchText(item) : getItemLabel(item);
+        return normalize(searchText).includes(query);
+      })
       .slice(0, 20);
-  }, [getItemLabel, items, value]);
+  }, [getItemLabel, getItemSearchText, items, value]);
 
   const showDropdown = isFocused && normalize(value).length > 0;
 
