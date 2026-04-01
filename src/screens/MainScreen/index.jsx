@@ -96,9 +96,9 @@ export function MainScreen() {
   async function loadHome() {
     try {
       const [allCities, tripsResponse] = await Promise.all([fetchAllCities(), fetchTrips()]);
-      const userTrips = (tripsResponse?.trips ?? []).filter((trip) => trip?.userId === userId);
+      const userTrips = (tripsResponse?.trips ?? []).filter((trip) => Number(trip?.userId) === Number(userId));
       const trip = pickCurrentTrip(userTrips);
-      const city = allCities.find((item) => item.id === trip?.cityId) || null;
+      const city = allCities.find((item) => Number(item?.id) === Number(trip?.cityId)) || null;
 
       setCurrentTrip(trip);
       setSelectedCity(city);
