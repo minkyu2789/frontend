@@ -1,25 +1,27 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { ImageBackground, Pressable, ScrollView, StyleSheet, Text, TouchableWithoutFeedback, View } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
-import { useNavigation } from "@react-navigation/native";
+import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import Person from "../../icons/person.svg";
 import Alarm from "../../icons/alarm.svg";
-import Now from "../../icons/state.svg";
 import Position from "../../icons/position.svg";
 import Direction from "../../icons/direction.svg";
 import Quick from "../../icons/quick.svg";
 import Speech from "../../icons/speech.svg";
+import { useAuth } from "../../auth";
+import { decodeUserIdFromToken } from "../../auth/userId";
 import {
   createSavedCafe,
   createSavedRestaurant,
   fetchCafeImages,
   fetchCafesByCity,
-  fetchCitiesByNationality,
-  fetchNationalities,
   fetchRestaurantImages,
   fetchRestaurantsByCity,
+  fetchTrips,
 } from "../../services";
+import { fetchAllCities } from "../../services/placeService";
+import { pickCurrentTrip } from "../../utils/trip";
 
 const CHIPS = [
   { id: "restaurant", label: "#식당" },
@@ -48,27 +50,14 @@ function ChipRow({ activeId, onSelect }) {
 
 export function MainScreen() {
   const navigation = useNavigation();
+  const { token } = useAuth();
   const [activeChip, setActiveChip] = useState("restaurant");
+  const [currentTrip, setCurrentTrip] = useState(null);
   const [selectedCity, setSelectedCity] = useState(null);
   const [places, setPlaces] = useState([]);
 
+  const userId = useMemo(() => decodeUserIdFromToken(token), [token]);
   const activePlaceType = useMemo(() => (activeChip === "cafe" ? "cafe" : "restaurant"), [activeChip]);
-
-  async function loadBaseCity() {
-    const nationalitiesResponse = await fetchNationalities();
-    const nationalities = nationalitiesResponse?.nationalities ?? [];
-    if (nationalities.length === 0) {
-      return null;
-    }
-
-    const citiesResponse = await fetchCitiesByNationality(nationalities[0].id);
-    const cities = citiesResponse?.cities ?? [];
-    if (cities.length === 0) {
-      return null;
-    }
-
-    return cities[0];
-  }
 
   async function enrichWithImages(items, type) {
     return Promise.all(
@@ -90,29 +79,42 @@ export function MainScreen() {
   }
 
   async function loadHome() {
-    const city = selectedCity || (await loadBaseCity());
-    setSelectedCity(city);
+    try {
+      const [allCities, tripsResponse] = await Promise.all([fetchAllCities(), fetchTrips()]);
+      const userTrips = (tripsResponse?.trips ?? []).filter((trip) => trip?.userId === userId);
+      const trip = pickCurrentTrip(userTrips);
+      const city = allCities.find((item) => item.id === trip?.cityId) || null;
 
-    if (!city?.id) {
+      setCurrentTrip(trip);
+      setSelectedCity(city);
+
+      if (!city?.id) {
+        setPlaces([]);
+        return;
+      }
+
+      if (activePlaceType === "cafe") {
+        const cafeResponse = await fetchCafesByCity(city.id);
+        const cafes = cafeResponse?.cafes ?? [];
+        setPlaces(await enrichWithImages(cafes, "cafe"));
+        return;
+      }
+
+      const restaurantResponse = await fetchRestaurantsByCity(city.id);
+      const restaurants = restaurantResponse?.restaurants ?? [];
+      setPlaces(await enrichWithImages(restaurants, "restaurant"));
+    } catch {
+      setCurrentTrip(null);
+      setSelectedCity(null);
       setPlaces([]);
-      return;
     }
-
-    if (activePlaceType === "cafe") {
-      const cafeResponse = await fetchCafesByCity(city.id);
-      const cafes = cafeResponse?.cafes ?? [];
-      setPlaces(await enrichWithImages(cafes, "cafe"));
-      return;
-    }
-
-    const restaurantResponse = await fetchRestaurantsByCity(city.id);
-    const restaurants = restaurantResponse?.restaurants ?? [];
-    setPlaces(await enrichWithImages(restaurants, "restaurant"));
   }
 
-  useEffect(() => {
-    loadHome();
-  }, [activePlaceType]);
+  useFocusEffect(
+    useCallback(() => {
+      loadHome();
+    }, [activePlaceType, userId]),
+  );
 
   async function handleSave(placeId) {
     if (activePlaceType === "cafe") {
@@ -133,12 +135,12 @@ export function MainScreen() {
       </View>
 
       <View style={styles.locationSection}>
-        <Now />
+        <View style={styles.badge}><Text style={styles.badgeText}>Now</Text></View>
         <View style={styles.locationRow}>
-          <Text style={styles.locationKo}>{selectedCity?.name || "오사카 도톤보리"}</Text>
+          <Text style={styles.locationKo}>{selectedCity?.name || "어디로 떠나시나요?"}</Text>
           <Position width={18} height={18} />
         </View>
-        <Text style={styles.locationEn}>{selectedCity?.name || "Dotombori District"}</Text>
+        <Text style={styles.locationEn}>{selectedCity?.name || "Where is next?"}</Text>
       </View>
 
       <View style={styles.quickRow}>
@@ -149,18 +151,20 @@ export function MainScreen() {
               <Text style={styles.nearbyTitle}>근처 밍글러</Text>
               <Direction width={18} height={18} />
             </View>
-            <Text style={styles.nearbyBody}>오늘 저녁에 같이{"\n"}<Text style={styles.nearbyHash}>#맛집투어</Text> 하실 분</Text>
+            <Text style={styles.nearbyBody}>
+              {currentTrip?.title ? `${currentTrip.title} 같이 하실 분` : "여행자를 만나보세요"}
+            </Text>
           </View>
         </TouchableWithoutFeedback>
 
         <View style={styles.rightQuickStack}>
-          <TouchableWithoutFeedback onPress={() => navigation.navigate("QuickMatch")}> 
+          <TouchableWithoutFeedback onPress={() => navigation.navigate("QuickMatch", { cityId: selectedCity?.id })}>
             <View style={styles.quickButtonCard}>
               <Quick />
               <Text style={styles.quickButtonText}>빠른 매칭</Text>
             </View>
           </TouchableWithoutFeedback>
-          <TouchableWithoutFeedback onPress={() => navigation.navigate("Chats")}> 
+          <TouchableWithoutFeedback onPress={() => navigation.navigate("Chats")}>
             <View style={styles.quickButtonCard}>
               <View style={styles.communityIconWrap}>
                 <Speech />
@@ -194,8 +198,8 @@ export function MainScreen() {
               <LinearGradient colors={["transparent", "rgba(0,0,0,0.75)"]} style={styles.placeGradient} />
               <View style={styles.placeFooter}>
                 <View style={styles.placeTextCol}>
-                  <Text style={styles.placeNameKo}>{place.name || "잇치치 혼포 타코야끼 도톤보리점"}</Text>
-                  <Text style={styles.placeNameEn}>{place.address || "Acchichi Hompo Dotombori"}</Text>
+                  <Text style={styles.placeNameKo}>{place.name || "-"}</Text>
+                  <Text style={styles.placeNameEn}>{place.address || "-"}</Text>
                 </View>
                 <Ionicons name="chevron-forward" size={20} color="#ffffff" />
               </View>
@@ -203,7 +207,7 @@ export function MainScreen() {
           </Pressable>
         ))}
 
-        <Pressable style={styles.floatingPlusButton}>
+        <Pressable style={styles.floatingPlusButton} onPress={loadHome}>
           <Ionicons name="add" size={30} color="#fff" />
         </Pressable>
 
@@ -231,6 +235,18 @@ const styles = StyleSheet.create({
   },
   locationSection: {
     gap: 6,
+  },
+  badge: {
+    alignSelf: "flex-start",
+    borderRadius: 10,
+    backgroundColor: "#1C73F0",
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+  },
+  badgeText: {
+    color: "#fff",
+    fontSize: 12,
+    fontWeight: "700",
   },
   locationRow: {
     flexDirection: "row",
@@ -273,10 +289,6 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 15,
     lineHeight: 22,
-  },
-  nearbyHash: {
-    color: "#61FF76",
-    fontWeight: "700",
   },
   rightQuickStack: {
     width: 170,
