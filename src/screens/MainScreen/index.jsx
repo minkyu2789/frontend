@@ -59,7 +59,7 @@ function ChipRow({ activeId, onSelect }) {
 
 export function MainScreen() {
   const navigation = useNavigation();
-  const { token } = useAuth();
+  const { token, logout } = useAuth();
   const [activeChip, setActiveChip] = useState("restaurant");
   const [currentTrip, setCurrentTrip] = useState(null);
   const [selectedCity, setSelectedCity] = useState(null);
@@ -211,8 +211,13 @@ export function MainScreen() {
   return (
     <ScrollView contentContainerStyle={styles.container}>
       <View style={styles.topIcons}>
+        <Pressable onPress={() => navigation.navigate("ProfileEdit")}>
+          <Person />
+        </Pressable>
+        <Pressable style={styles.logoutMiniButton} onPress={logout}>
+          <Text style={styles.logoutMiniButtonText}>로그아웃</Text>
+        </Pressable>
         <Alarm />
-        <Person />
       </View>
 
       <View style={styles.locationSection}>
@@ -322,7 +327,22 @@ const styles = StyleSheet.create({
   topIcons: {
     flexDirection: "row",
     justifyContent: "flex-end",
+    alignItems: "center",
     gap: 14,
+  },
+  logoutMiniButton: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#D5D5D5",
+    backgroundColor: "#FFF",
+    paddingHorizontal: 10,
+    height: 24,
+    justifyContent: "center",
+  },
+  logoutMiniButtonText: {
+    color: "#616161",
+    fontSize: 11,
+    fontWeight: "700",
   },
   locationSection: {
     gap: 6,
