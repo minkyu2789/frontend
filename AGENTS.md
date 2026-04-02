@@ -6,6 +6,7 @@
 - Build UI and interaction flows from `../figma.pdf`.
 - Build data integration from backend APIs in `../backend`.
 - Keep implementation aligned with existing navigation structure in `src/navigation`.
+- Do not change files in `../backend`.
 
 ## Git Workflow Rules
 
