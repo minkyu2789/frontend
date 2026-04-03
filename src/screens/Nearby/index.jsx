@@ -1,11 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { Image, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import MapView, { Marker } from "react-native-maps";
 import { Ionicons } from "@expo/vector-icons";
 import { Calendar } from "react-native-calendars";
-import MingleMarkerActive from "../../icons/mingle_marker_active.svg";
-import MingleMarkerInactive from "../../icons/mingle_marker_inactive.svg";
 import { useAuth } from "../../auth";
 import { decodeUserIdFromToken } from "../../auth/userId";
 import { useLocale } from "../../locale";
@@ -560,11 +558,14 @@ export function Nearby({ route }) {
                     coordinate={marker.coordinate}
                     onPress={() => setSelectedMingleId(marker.id)}
                   >
-                    {Number(selectedMingleId) === Number(marker.id) ? (
-                      <MingleMarkerActive width={22} height={28} />
-                    ) : (
-                      <MingleMarkerInactive width={20} height={26} />
-                    )}
+                    <Image
+                      source={
+                        Number(selectedMingleId) === Number(marker.id)
+                          ? require("../../../map_sel.png")
+                          : require("../../../map_notsel.png")
+                      }
+                      style={styles.markerImage}
+                    />
                   </Marker>
                 ))}
               </MapView>
@@ -959,6 +960,11 @@ const styles = StyleSheet.create({
   mapEmpty: {
     color: "#6F778B",
     fontSize: 12,
+  },
+  markerImage: {
+    width: 26,
+    height: 34,
+    resizeMode: "contain",
   },
   drawerOverlay: {
     flex: 1,
