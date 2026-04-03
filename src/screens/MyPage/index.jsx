@@ -3,7 +3,6 @@ import { Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-nati
 import { useFocusEffect } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
 import DirectionBlack from "../../icons/direction_black.svg";
-import TravelIcon from "../../icons/travelIcon.svg";
 import { useAuth } from "../../auth";
 import { decodeUserIdFromToken } from "../../auth/userId";
 import { fetchChatRooms, fetchMingleMinglers, fetchMingles, fetchTrips, fetchUser, fetchUsers } from "../../services";
@@ -369,7 +368,6 @@ export function MyPage({ navigation }) {
                 <View style={[styles.tripCardOverlay, cardImageUrl && styles.tripCardOverlayWithImage]} />
                 <View style={styles.tripCardContent}>
                   <View style={styles.tripHead}>
-                    <TravelIcon />
                     <Pressable
                       style={styles.tripArrowButton}
                       hitSlop={12}
@@ -545,8 +543,8 @@ const styles = StyleSheet.create({
   },
   tripHead: {
     flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 10,
+    justifyContent: "flex-end",
+    marginBottom: 8,
     alignItems: "center",
   },
   tripArrowButton: {
