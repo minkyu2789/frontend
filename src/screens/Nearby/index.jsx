@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
+import MapView, { Callout, Marker } from "react-native-maps";
 import { useAuth } from "../../auth";
 import { decodeUserIdFromToken } from "../../auth/userId";
 import { fetchMingleMinglers, fetchMingles, joinMingle, leaveMingle } from "../../services/mingleService";
@@ -49,6 +50,20 @@ function toRelativeTimeLabel(isoString) {
   return `${days}일 전`;
 }
 
+function toCoordinateValue(value) {
+  const num = Number(value);
+  return Number.isFinite(num) ? num : null;
+}
+
+function toMinglePhaseLabel(createdDateTime) {
+  if (!createdDateTime) {
+    return "기록";
+  }
+
+  const diffMs = new Date(createdDateTime).getTime() - Date.now();
+  return diffMs > 0 ? "예정" : "기록";
+}
+
 export function Nearby({ route }) {
   const { token } = useAuth();
   const [activeTab, setActiveTab] = useState(TAB_LIGHTNING);
@@ -81,6 +96,45 @@ export function Nearby({ route }) {
 
     return result;
   }, [mingleRows]);
+
+  const mingleMarkers = useMemo(() => {
+    return mingleRows
+      .map((row) => {
+        const latitude = toCoordinateValue(row?.mingle?.latitude);
+        const longitude = toCoordinateValue(row?.mingle?.longitude);
+        if (latitude == null || longitude == null) {
+          return null;
+        }
+
+        return {
+          id: row?.mingle?.id,
+          title: row?.mingle?.title || "제목 없음",
+          description: row?.mingle?.description || "",
+          phase: toMinglePhaseLabel(row?.mingle?.createdDateTime),
+          createdDateTime: row?.mingle?.createdDateTime,
+          coordinate: { latitude, longitude },
+        };
+      })
+      .filter(Boolean);
+  }, [mingleRows]);
+
+  const mapRegion = useMemo(() => {
+    if (mingleMarkers.length === 0) {
+      return {
+        latitude: 37.5665,
+        longitude: 126.978,
+        latitudeDelta: 0.25,
+        longitudeDelta: 0.25,
+      };
+    }
+
+    return {
+      latitude: mingleMarkers[0].coordinate.latitude,
+      longitude: mingleMarkers[0].coordinate.longitude,
+      latitudeDelta: 0.08,
+      longitudeDelta: 0.08,
+    };
+  }, [mingleMarkers]);
 
   const loadNearby = useCallback(async () => {
     setLoading(true);
@@ -216,7 +270,34 @@ export function Nearby({ route }) {
           : null}
 
         {!loading && !error && activeTab === TAB_GROUP
-          ? mingleRows.map((row) => {
+          ? (
+            <>
+              <View style={styles.mapCard}>
+                <Text style={styles.mapTitle}>밍글 지도</Text>
+                <Text style={styles.mapSubtitle}>좌표가 등록된 밍글 위치를 표시합니다.</Text>
+                <MapView style={styles.map} initialRegion={mapRegion}>
+                  {mingleMarkers.map((marker) => (
+                    <Marker
+                      key={marker.id}
+                      coordinate={marker.coordinate}
+                      pinColor={marker.phase === "예정" ? "#1C73F0" : "#687389"}
+                    >
+                      <Callout>
+                        <View style={styles.callout}>
+                          <Text style={styles.calloutTitle}>{marker.title}</Text>
+                          <Text style={styles.calloutMeta}>
+                            {marker.phase} · {toRelativeTimeLabel(marker.createdDateTime)}
+                          </Text>
+                          {marker.description ? <Text style={styles.calloutDescription}>{marker.description}</Text> : null}
+                        </View>
+                      </Callout>
+                    </Marker>
+                  ))}
+                </MapView>
+                {mingleMarkers.length === 0 ? <Text style={styles.mapEmpty}>표시 가능한 밍글 좌표가 없습니다.</Text> : null}
+              </View>
+
+              {mingleRows.map((row) => {
               const joined = joinedMingleIdSet.has(row?.mingle?.id);
               const minglerCount = row?.minglers?.length ?? 0;
 
@@ -240,8 +321,9 @@ export function Nearby({ route }) {
                   </Pressable>
                 </View>
               );
-            })
-          : null}
+            })}
+            </>
+          ) : null}
 
         {!loading && !error && ((activeTab === TAB_LIGHTNING && nearbyProfiles.length === 0) || (activeTab === TAB_GROUP && mingleRows.length === 0)) ? (
           <Text style={styles.infoText}>표시할 항목이 없습니다.</Text>
@@ -355,5 +437,50 @@ const styles = StyleSheet.create({
     fontSize: 13,
     textAlign: "center",
     marginTop: 6,
+  },
+  mapCard: {
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#E4E8EF",
+    backgroundColor: "#FFFFFF",
+    padding: 12,
+    gap: 6,
+  },
+  mapTitle: {
+    color: "#101827",
+    fontSize: 14,
+    fontWeight: "700",
+  },
+  mapSubtitle: {
+    color: "#6A7388",
+    fontSize: 12,
+  },
+  map: {
+    marginTop: 4,
+    height: 220,
+    width: "100%",
+    borderRadius: 12,
+  },
+  mapEmpty: {
+    color: "#6F778B",
+    fontSize: 12,
+  },
+  callout: {
+    minWidth: 180,
+    maxWidth: 240,
+    gap: 2,
+  },
+  calloutTitle: {
+    color: "#101827",
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  calloutMeta: {
+    color: "#5F6980",
+    fontSize: 11,
+  },
+  calloutDescription: {
+    color: "#25314D",
+    fontSize: 12,
   },
 });
