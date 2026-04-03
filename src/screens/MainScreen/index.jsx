@@ -555,6 +555,11 @@ export function MainScreen() {
               onPress={() =>
                 navigation.navigate("Nearby", {
                   cityId: selectedCity?.id,
+                  cityName:
+                    selectedCity?.cityNameKorean ||
+                    selectedCity?.cityNameEnglish ||
+                    selectedCity?.name ||
+                    "",
                   cityLatitude: nearbyCityCenter?.latitude ?? null,
                   cityLongitude: nearbyCityCenter?.longitude ?? null,
                 })
