@@ -197,8 +197,14 @@ export function MyPage({ navigation }) {
     const avatars = [];
 
     for (const room of directChatRoomsByRecent) {
-      const updatedAt = parseDateTime(room?.updatedDateTime);
-      if (!updatedAt || updatedAt < tripStartAt || updatedAt > tripEndAt) {
+      const createdAt = parseDateTime(room?.createdDateTime);
+      const updatedAt = parseDateTime(room?.updatedDateTime) || createdAt;
+      if (!createdAt || !updatedAt) {
+        continue;
+      }
+
+      const overlapsTripWindow = createdAt <= tripEndAt && updatedAt >= tripStartAt;
+      if (!overlapsTripWindow) {
         continue;
       }
 
