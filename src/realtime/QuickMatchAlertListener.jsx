@@ -51,6 +51,7 @@ export function QuickMatchAlertListener() {
   const userSubscriptionRef = useRef(null);
   const lastNotificationAtRef = useRef({});
   const handledAcceptedQuickMatchesRef = useRef(new Set());
+  const incomingQuickMatchIdRef = useRef(null);
   const bannerTimerRef = useRef(null);
 
   const shouldNotify = useCallback((event) => {
@@ -83,6 +84,34 @@ export function QuickMatchAlertListener() {
       setBannerMessage(null);
     }, 4200);
   }, []);
+
+  useEffect(() => {
+    incomingQuickMatchIdRef.current = toNumberOrNull(incomingQuickMatch?.quickMatch?.id);
+  }, [incomingQuickMatch]);
+
+  const clearIncomingQuickMatchIfResolved = useCallback((event) => {
+    const incomingQuickMatchId = incomingQuickMatchIdRef.current;
+    if (!incomingQuickMatchId) {
+      return;
+    }
+
+    const eventType = event?.eventType;
+    const eventQuickMatchId = toNumberOrNull(event?.quickMatch?.id);
+    const isResolvedEvent =
+      eventType === "QUICK_MATCH_ACCEPTED" ||
+      eventType === "QUICK_MATCH_DECLINED" ||
+      eventType === "QUICK_MATCH_ERROR";
+    const isSameQuickMatch = eventQuickMatchId && eventQuickMatchId === incomingQuickMatchId;
+    const isActionFailureForIncoming =
+      eventType === "QUICK_MATCH_ERROR" &&
+      incomingActionLoading &&
+      (event?.action === "QUICK_MATCH_ACCEPT" || event?.action === "QUICK_MATCH_DECLINE");
+
+    if (isResolvedEvent && (isSameQuickMatch || isActionFailureForIncoming)) {
+      setIncomingQuickMatch(null);
+      setIncomingActionLoading(false);
+    }
+  }, [incomingActionLoading]);
 
   const dismissIncomingQuickMatch = useCallback(() => {
     if (incomingActionLoading) {
@@ -228,6 +257,8 @@ export function QuickMatchAlertListener() {
 
     userSubscriptionRef.current?.unsubscribe();
     userSubscriptionRef.current = subscribeUserQuickMatches(clientRef.current, userId, async (event) => {
+      clearIncomingQuickMatchIfResolved(event);
+
       if (event?.eventType === "QUICK_MATCH_ERROR") {
         if (pendingAcceptedQuickMatchId && event?.action === "QUICK_MATCH_ACCEPT") {
           setPendingAcceptedQuickMatchId(null);
@@ -280,7 +311,7 @@ export function QuickMatchAlertListener() {
       userSubscriptionRef.current?.unsubscribe();
       userSubscriptionRef.current = null;
     };
-  }, [pendingAcceptedQuickMatchId, socketReady, userId, shouldNotify, showInAppBanner]);
+  }, [pendingAcceptedQuickMatchId, socketReady, userId, shouldNotify, showInAppBanner, clearIncomingQuickMatchIfResolved]);
 
   useEffect(() => {
     if (!socketReady || !clientRef.current || !userId || subscribedCityIds.length === 0) {
@@ -296,7 +327,13 @@ export function QuickMatchAlertListener() {
         console.log("[QM SOCKET] CITY EVENT", event?.eventType || "-", event?.quickMatch?.id || "-");
         const targetUserIds = event?.targetUserIds ?? [];
         const isTargetUser = targetUserIds.length === 0 || targetUserIds.some((id) => toNumberOrNull(id) === userId);
-        if (!isTargetUser || !shouldNotify(event)) {
+        if (!isTargetUser) {
+          return;
+        }
+
+        clearIncomingQuickMatchIfResolved(event);
+
+        if (!shouldNotify(event)) {
           return;
         }
 
@@ -314,7 +351,7 @@ export function QuickMatchAlertListener() {
       citySubscriptionRef.current.forEach((subscription) => subscription?.unsubscribe());
       citySubscriptionRef.current.clear();
     };
-  }, [socketReady, userId, subscribedCityIds, shouldNotify, showInAppBanner]);
+  }, [socketReady, userId, subscribedCityIds, shouldNotify, showInAppBanner, clearIncomingQuickMatchIfResolved]);
 
   const hasBanner = bannerVisible && bannerMessage;
   const hasIncomingQuickMatch = Boolean(incomingQuickMatch?.quickMatch?.id);
