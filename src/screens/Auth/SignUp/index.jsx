@@ -4,6 +4,8 @@ import { SearchDropdown } from "../../../components/SearchDropdown";
 import { useAuth } from "../../../auth";
 import { fetchKeywords, fetchNationalities } from "../../../services";
 
+const KEYWORDS_PER_PAGE = 10;
+
 function normalizeLiteral(value) {
   return String(value || "").trim().toLowerCase();
 }
@@ -50,6 +52,7 @@ export function SignUpScreen({ navigation }) {
   const [nationalities, setNationalities] = useState([]);
   const [keywords, setKeywords] = useState([]);
   const [selectedKeywordIds, setSelectedKeywordIds] = useState([]);
+  const [keywordPage, setKeywordPage] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
@@ -60,6 +63,16 @@ export function SignUpScreen({ navigation }) {
 
     return `${selectedKeywordIds.length}개 선택`;
   }, [selectedKeywordIds.length]);
+
+  const totalKeywordPages = useMemo(
+    () => Math.max(1, Math.ceil(keywords.length / KEYWORDS_PER_PAGE)),
+    [keywords.length],
+  );
+
+  const pagedKeywords = useMemo(() => {
+    const startIndex = keywordPage * KEYWORDS_PER_PAGE;
+    return keywords.slice(startIndex, startIndex + KEYWORDS_PER_PAGE);
+  }, [keywordPage, keywords]);
 
   function updateField(key, value) {
     setForm((previous) => ({
@@ -80,10 +93,12 @@ export function SignUpScreen({ navigation }) {
         const loadedKeywords = keywordResponse?.keywords ?? [];
 
         setNationalities(loadedNationalities);
-        setKeywords(loadedKeywords.sort((a, b) => Number(a?.priority ?? 0) - Number(b?.priority ?? 0)));
+        setKeywords(loadedKeywords.sort((a, b) => Number(b?.priority ?? 0) - Number(a?.priority ?? 0)));
+        setKeywordPage(0);
       } catch {
         setNationalities([]);
         setKeywords([]);
+        setKeywordPage(0);
       }
     }
 
@@ -186,7 +201,7 @@ export function SignUpScreen({ navigation }) {
         </View>
         <Text style={styles.keywordHint}>중복 선택 가능</Text>
         <View style={styles.keywordWrap}>
-          {keywords.map((keyword) => {
+          {pagedKeywords.map((keyword) => {
             const active = selectedKeywordIds.includes(keyword.id);
             return (
               <Pressable
@@ -201,6 +216,25 @@ export function SignUpScreen({ navigation }) {
             );
           })}
         </View>
+        {keywords.length > KEYWORDS_PER_PAGE ? (
+          <View style={styles.keywordPaginationRow}>
+            <Pressable
+              style={[styles.keywordPageBtn, keywordPage <= 0 && styles.keywordPageBtnDisabled]}
+              disabled={keywordPage <= 0}
+              onPress={() => setKeywordPage((previous) => Math.max(0, previous - 1))}
+            >
+              <Text style={styles.keywordPageBtnText}>이전</Text>
+            </Pressable>
+            <Text style={styles.keywordPageText}>{keywordPage + 1} / {totalKeywordPages}</Text>
+            <Pressable
+              style={[styles.keywordPageBtn, keywordPage >= totalKeywordPages - 1 && styles.keywordPageBtnDisabled]}
+              disabled={keywordPage >= totalKeywordPages - 1}
+              onPress={() => setKeywordPage((previous) => Math.min(totalKeywordPages - 1, previous + 1))}
+            >
+              <Text style={styles.keywordPageBtnText}>다음</Text>
+            </Pressable>
+          </View>
+        ) : null}
 
         <Text style={styles.label}>Sex</Text>
         <View style={styles.sexRow}>
@@ -316,6 +350,34 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
     gap: 8,
     marginBottom: 4,
+  },
+  keywordPaginationRow: {
+    marginTop: 2,
+    marginBottom: 4,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  keywordPageBtn: {
+    borderWidth: 1,
+    borderColor: "#D4DEEE",
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    backgroundColor: "#FFFFFF",
+  },
+  keywordPageBtnDisabled: {
+    opacity: 0.45,
+  },
+  keywordPageBtnText: {
+    fontSize: 12,
+    color: "#355383",
+    fontWeight: "600",
+  },
+  keywordPageText: {
+    fontSize: 12,
+    color: "#6F778B",
+    fontWeight: "600",
   },
   keywordChip: {
     borderRadius: 999,
