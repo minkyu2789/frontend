@@ -158,7 +158,16 @@ export function Chats({ navigation, route }) {
               <View style={styles.roomMain}>
                 <View style={styles.roomTopRow}>
                   <Text style={styles.roomName} numberOfLines={1}>{title}</Text>
-                  <Text style={styles.roomTime}>{formatRoomTime(item.updatedDateTime)}</Text>
+                  <View style={styles.roomMetaWrap}>
+                    <Text style={styles.roomTime}>{formatRoomTime(item.updatedDateTime)}</Text>
+                    {Number(item?.unreadMessageCount || 0) > 0 ? (
+                      <View style={styles.unreadBadge}>
+                        <Text style={styles.unreadBadgeText}>
+                          {Number(item.unreadMessageCount) > 99 ? "99+" : String(item.unreadMessageCount)}
+                        </Text>
+                      </View>
+                    ) : null}
+                  </View>
                 </View>
                 <Text style={styles.roomSubtitle} numberOfLines={1}>{roomSubtitle(item)}</Text>
               </View>
@@ -276,6 +285,25 @@ const styles = StyleSheet.create({
     color: "#6B7280",
     fontSize: 11,
     fontWeight: "500",
+  },
+  roomMetaWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  unreadBadge: {
+    minWidth: 20,
+    height: 20,
+    paddingHorizontal: 6,
+    borderRadius: 10,
+    backgroundColor: "#1D4ED8",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  unreadBadgeText: {
+    color: "#FFFFFF",
+    fontSize: 10,
+    fontWeight: "700",
   },
   roomSubtitle: {
     marginTop: 3,
