@@ -14,6 +14,15 @@ const OPTION_ITEMS = [
   { key: "LOCALS", title: "여행자 밍글러", subtitle: "여행지 공유" },
   { key: "ANY", title: "무관", subtitle: "상관없어요" },
 ];
+const INTEREST_ITEMS = [
+  { key: "MEAL", label: "#식사" },
+  { key: "HOBBY", label: "#취미생활" },
+  { key: "TALK", label: "#담소" },
+  { key: "REST", label: "#휴식" },
+  { key: "ANY", label: "#상관없어요" },
+];
+const STEP_INTEREST = 0;
+const STEP_TARGET = 1;
 const MIN_PROGRESS_VISIBLE_MS = 1200;
 
 function formatElapsed(seconds) {
@@ -27,6 +36,8 @@ export function QuickMatch({ navigation, route }) {
   const { token } = useAuth();
   const userId = useMemo(() => Number(decodeUserIdFromToken(token) || 0), [token]);
   const [selected, setSelected] = useState("MINGLERS");
+  const [selectionStep, setSelectionStep] = useState(STEP_INTEREST);
+  const [selectedInterestKeys, setSelectedInterestKeys] = useState(["ANY"]);
   const [submitting, setSubmitting] = useState(false);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [error, setError] = useState(null);
@@ -46,6 +57,12 @@ export function QuickMatch({ navigation, route }) {
     () => OPTION_ITEMS.find((item) => item.key === selected)?.title || selected,
     [selected],
   );
+  const selectedInterestsLabel = useMemo(() => {
+    return INTEREST_ITEMS
+      .filter((item) => selectedInterestKeys.includes(item.key))
+      .map((item) => item.label)
+      .join(" ");
+  }, [selectedInterestKeys]);
 
   useEffect(() => {
     if (!userId) {
@@ -191,6 +208,16 @@ export function QuickMatch({ navigation, route }) {
   }, [submitting]);
 
   async function handleConfirm() {
+    if (selectionStep === STEP_INTEREST) {
+      if (selectedInterestKeys.length === 0) {
+        setError("함께 하고 싶은 활동을 하나 이상 선택해주세요.");
+        return;
+      }
+      setError(null);
+      setSelectionStep(STEP_TARGET);
+      return;
+    }
+
     if (!Number.isFinite(cityId) || cityId <= 0) {
       setError("유효한 도시 정보가 없어 빠른 매칭을 생성할 수 없습니다.");
       navigation.goBack();
@@ -211,7 +238,7 @@ export function QuickMatch({ navigation, route }) {
       }
       await publishCreateQuickMatch(clientRef.current, {
         cityId,
-        message: null,
+        message: selectedInterestKeys.includes("ANY") ? null : selectedInterestsLabel,
         targetType: String(selected || "ANY"),
       });
       const elapsedMs = Date.now() - requestStartedAt;
@@ -241,34 +268,74 @@ export function QuickMatch({ navigation, route }) {
     }
   }
 
+  function handleSelectInterest(key) {
+    setError(null);
+    setSelectedInterestKeys((previous) => {
+      if (key === "ANY") {
+        return ["ANY"];
+      }
+
+      const next = previous.filter((item) => item !== "ANY");
+      if (next.includes(key)) {
+        const removed = next.filter((item) => item !== key);
+        return removed.length === 0 ? ["ANY"] : removed;
+      }
+      return [...next, key];
+    });
+  }
+
   return (
     <View style={styles.overlay}>
       <View style={styles.modal}>
         <View style={styles.topHandle} />
         <View style={styles.headerRow}>
-          <Text style={styles.title}>원하는 밍글러를 선택해주세요!</Text>
+          <Text style={styles.title}>
+            {selectionStep === STEP_INTEREST ? "빠른 매칭을 시작할게요!" : "원하는 밍글러를 선택해주세요!"}
+          </Text>
           <Pressable onPress={() => navigation.goBack()}>
             <Ionicons name="close" size={28} color="#111" />
           </Pressable>
         </View>
 
-        <View style={styles.optionsRow}>
-          {OPTION_ITEMS.map((option) => {
-            const active = selected === option.key;
-            return (
-              <Pressable key={option.key} style={[styles.optionCard, active && styles.optionCardActive]} onPress={() => setSelected(option.key)}>
-                <Text style={[styles.optionTitle, active && styles.optionTitleActive]}>{option.title}</Text>
-                <Text style={[styles.optionSubtitle, active && styles.optionSubtitleActive]}>{option.subtitle}</Text>
-              </Pressable>
-            );
-          })}
-        </View>
+        {selectionStep === STEP_INTEREST ? (
+          <>
+            <Text style={styles.sectionDescription}>여행자와 무엇을 함께 하고 싶나요?</Text>
+            <View style={styles.interestWrap}>
+              {INTEREST_ITEMS.map((item) => {
+                const active = selectedInterestKeys.includes(item.key);
+                return (
+                  <Pressable
+                    key={item.key}
+                    style={[styles.interestChip, active && styles.interestChipActive]}
+                    onPress={() => handleSelectInterest(item.key)}
+                  >
+                    <Text style={[styles.interestChipText, active && styles.interestChipTextActive]}>{item.label}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </>
+        ) : (
+          <View style={styles.optionsRow}>
+            {OPTION_ITEMS.map((option) => {
+              const active = selected === option.key;
+              return (
+                <Pressable key={option.key} style={[styles.optionCard, active && styles.optionCardActive]} onPress={() => setSelected(option.key)}>
+                  <Text style={[styles.optionTitle, active && styles.optionTitleActive]}>{option.title}</Text>
+                  <Text style={[styles.optionSubtitle, active && styles.optionSubtitleActive]}>{option.subtitle}</Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        )}
 
         {error ? <Text style={styles.errorText}>{error}</Text> : null}
         {!socketReady ? <Text style={styles.metaText}>실시간 연결 중...</Text> : null}
 
         <Pressable style={[styles.confirmBtn, submitting && styles.confirmBtnDisabled]} onPress={handleConfirm} disabled={submitting}>
-          <Text style={styles.confirmText}>{submitting ? "확인 중..." : "확인"}</Text>
+          <Text style={styles.confirmText}>
+            {submitting ? "확인 중..." : selectionStep === STEP_INTEREST ? "다음" : "확인"}
+          </Text>
         </Pressable>
       </View>
 
@@ -280,6 +347,7 @@ export function QuickMatch({ navigation, route }) {
             </Pressable>
             <Text style={styles.progressTitle}>빠른 매칭 요청 중</Text>
             <Text style={styles.progressTarget}>{selectedLabel}</Text>
+            {selectedInterestsLabel ? <Text style={styles.progressInterest}>{selectedInterestsLabel}</Text> : null}
             <Text style={styles.progressDescription}>요청이 완료될 때까지 잠시만 기다려 주세요.</Text>
             <Text style={styles.progressElapsedLabel}>경과 시간</Text>
             <Text style={styles.progressElapsedValue}>{formatElapsed(elapsedSeconds)}</Text>
@@ -327,6 +395,36 @@ const styles = StyleSheet.create({
   optionsRow: {
     flexDirection: "row",
     gap: 8,
+  },
+  sectionDescription: {
+    color: "#374151",
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  interestWrap: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  interestChip: {
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#D6DFEF",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: "#F4F7FD",
+  },
+  interestChipActive: {
+    borderColor: "#1C73F0",
+    backgroundColor: "#EAF2FF",
+  },
+  interestChipText: {
+    color: "#45536F",
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  interestChipTextActive: {
+    color: "#165FC6",
   },
   optionCard: {
     flex: 1,
@@ -425,6 +523,12 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "700",
     color: "#1D4ED8",
+  },
+  progressInterest: {
+    marginTop: 4,
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#2B4B84",
   },
   progressDescription: {
     marginTop: 10,
