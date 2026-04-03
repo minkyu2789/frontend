@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import MapView, { Marker } from "react-native-maps";
@@ -6,6 +6,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../../auth";
 import { decodeUserIdFromToken } from "../../auth/userId";
 import { createMingle, fetchMingleMinglers, fetchMingles, joinMingle, leaveMingle } from "../../services/mingleService";
+import { fetchGooglePlaceDetails, searchGooglePlaces } from "../../services/googlePlacesService";
 import { fetchUsers } from "../../services/userService";
 
 const TAB_LIGHTNING = "LIGHTNING";
@@ -102,10 +103,20 @@ export function Nearby({ route }) {
     title: "",
     description: "",
     placeName: "",
+    latitude: null,
+    longitude: null,
     meetDateTime: "",
   });
+  const [placeQuery, setPlaceQuery] = useState("");
+  const [placeSuggestions, setPlaceSuggestions] = useState([]);
+  const [placeSearchLoading, setPlaceSearchLoading] = useState(false);
+  const [placeSearchError, setPlaceSearchError] = useState(null);
+  const [placeDetailLoading, setPlaceDetailLoading] = useState(false);
+  const placeSearchSequenceRef = useRef(0);
+  const placeSessionTokenRef = useRef(`mingle-${Date.now()}`);
 
   const cityId = Number(route?.params?.cityId);
+  const cityName = String(route?.params?.cityName || "").trim();
   const cityLatitude = toCoordinateValue(route?.params?.cityLatitude);
   const cityLongitude = toCoordinateValue(route?.params?.cityLongitude);
   const cityCenter = useMemo(() => {
@@ -305,14 +316,108 @@ export function Nearby({ route }) {
       title: "",
       description: "",
       placeName: "",
+      latitude: null,
+      longitude: null,
       meetDateTime: "",
     });
+    setPlaceQuery("");
+    setPlaceSuggestions([]);
+    setPlaceSearchError(null);
+    setPlaceSearchLoading(false);
+    setPlaceDetailLoading(false);
+    placeSessionTokenRef.current = `mingle-${Date.now()}`;
+  }
+
+  useEffect(() => {
+    if (!createModalVisible) {
+      return undefined;
+    }
+
+    const query = placeQuery.trim();
+    if (query.length < 2) {
+      setPlaceSuggestions([]);
+      setPlaceSearchLoading(false);
+      setPlaceSearchError(null);
+      return undefined;
+    }
+
+    const currentSequence = ++placeSearchSequenceRef.current;
+    const timer = setTimeout(async () => {
+      setPlaceSearchLoading(true);
+      setPlaceSearchError(null);
+      try {
+        const suggestions = await searchGooglePlaces({
+          input: query,
+          cityName,
+          sessionToken: placeSessionTokenRef.current,
+        });
+        if (currentSequence !== placeSearchSequenceRef.current) {
+          return;
+        }
+        setPlaceSuggestions(suggestions.slice(0, 6));
+      } catch (e) {
+        if (currentSequence !== placeSearchSequenceRef.current) {
+          return;
+        }
+        setPlaceSuggestions([]);
+        setPlaceSearchError(
+          e?.message === "Google Places API key is not configured."
+            ? "Google Places API key가 설정되지 않았습니다."
+            : "장소 검색에 실패했습니다.",
+        );
+      } finally {
+        if (currentSequence === placeSearchSequenceRef.current) {
+          setPlaceSearchLoading(false);
+        }
+      }
+    }, 250);
+
+    return () => clearTimeout(timer);
+  }, [cityName, createModalVisible, placeQuery]);
+
+  async function handleSelectPlaceSuggestion(item) {
+    if (!item?.placeId) {
+      return;
+    }
+
+    setPlaceDetailLoading(true);
+    setPlaceSearchError(null);
+    try {
+      const details = await fetchGooglePlaceDetails({
+        placeId: item.placeId,
+        sessionToken: placeSessionTokenRef.current,
+      });
+      const displayName = details?.name || item.primaryText || item.description || "";
+      setCreateForm((prev) => ({
+        ...prev,
+        placeName: displayName,
+        latitude: details.latitude,
+        longitude: details.longitude,
+      }));
+      setPlaceQuery(displayName);
+      setPlaceSuggestions([]);
+      setPlaceSearchError(null);
+      placeSessionTokenRef.current = `mingle-${Date.now()}`;
+    } catch {
+      setPlaceSearchError("선택한 장소 정보를 불러오지 못했습니다.");
+    } finally {
+      setPlaceDetailLoading(false);
+    }
   }
 
   async function handleCreateMingle() {
     const title = String(createForm.title || "").trim();
     if (!cityId || !title) {
       setError("밍글 제목을 입력해주세요.");
+      return;
+    }
+
+    const placeName = String(createForm.placeName || "").trim();
+    const hasTypedPlaceButNotSelected =
+      String(placeQuery || "").trim().length > 0 &&
+      (!Number.isFinite(createForm.latitude) || !Number.isFinite(createForm.longitude));
+    if (hasTypedPlaceButNotSelected) {
+      setError("장소는 검색 결과에서 선택해주세요.");
       return;
     }
 
@@ -323,10 +428,10 @@ export function Nearby({ route }) {
         cityId,
         title,
         description: String(createForm.description || "").trim() || null,
-        placeName: String(createForm.placeName || "").trim() || null,
+        placeName: placeName || null,
         meetDateTime: String(createForm.meetDateTime || "").trim() || null,
-        latitude: null,
-        longitude: null,
+        latitude: placeName ? createForm.latitude : null,
+        longitude: placeName ? createForm.longitude : null,
       });
       setCreateModalVisible(false);
       resetCreateForm();
@@ -525,10 +630,47 @@ export function Nearby({ route }) {
             />
             <TextInput
               style={styles.formInput}
-              value={createForm.placeName}
-              onChangeText={(value) => setCreateForm((prev) => ({ ...prev, placeName: value }))}
+              value={placeQuery}
+              onChangeText={(value) => {
+                setPlaceQuery(value);
+                setCreateForm((prev) => ({
+                  ...prev,
+                  placeName: "",
+                  latitude: null,
+                  longitude: null,
+                }));
+              }}
               placeholder="어디서 만날까요? (선택)"
             />
+            {placeSearchLoading || placeDetailLoading ? (
+              <Text style={styles.placeHelperText}>장소를 찾는 중...</Text>
+            ) : null}
+            {placeSearchError ? <Text style={styles.placeErrorText}>{placeSearchError}</Text> : null}
+            {placeSuggestions.length > 0 ? (
+              <View style={styles.placeSuggestionList}>
+                {placeSuggestions.map((item) => (
+                  <Pressable
+                    key={item.placeId}
+                    style={styles.placeSuggestionItem}
+                    onPress={() => handleSelectPlaceSuggestion(item)}
+                  >
+                    <Text style={styles.placeSuggestionPrimary} numberOfLines={1}>
+                      {item.primaryText || item.description}
+                    </Text>
+                    {item.secondaryText ? (
+                      <Text style={styles.placeSuggestionSecondary} numberOfLines={1}>
+                        {item.secondaryText}
+                      </Text>
+                    ) : null}
+                  </Pressable>
+                ))}
+              </View>
+            ) : null}
+            {Number.isFinite(createForm.latitude) && Number.isFinite(createForm.longitude) ? (
+              <Text style={styles.placeHelperText}>
+                선택된 위치: {createForm.latitude.toFixed(5)}, {createForm.longitude.toFixed(5)}
+              </Text>
+            ) : null}
             <TextInput
               style={styles.formInput}
               value={createForm.meetDateTime}
@@ -824,6 +966,37 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFFFFF",
     fontSize: 13,
     color: "#111827",
+  },
+  placeSuggestionList: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#D5DEEB",
+    backgroundColor: "#FFFFFF",
+    overflow: "hidden",
+  },
+  placeSuggestionItem: {
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#EEF2F7",
+    gap: 2,
+  },
+  placeSuggestionPrimary: {
+    color: "#111827",
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  placeSuggestionSecondary: {
+    color: "#64748B",
+    fontSize: 12,
+  },
+  placeHelperText: {
+    color: "#5B667E",
+    fontSize: 12,
+  },
+  placeErrorText: {
+    color: "#C62828",
+    fontSize: 12,
   },
   formInputMultiline: {
     minHeight: 90,
