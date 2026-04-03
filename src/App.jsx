@@ -1,10 +1,13 @@
 import { Navigation } from './navigation';
 import { AuthProvider } from './auth';
+import { LocaleProvider } from "./locale";
 
 export default function App() {
   return (
     <AuthProvider>
-      <Navigation />
+      <LocaleProvider>
+        <Navigation />
+      </LocaleProvider>
     </AuthProvider>
   );
 }
