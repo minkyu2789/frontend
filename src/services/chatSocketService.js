@@ -99,9 +99,9 @@ export function createChatSocketClient({ onConnect, onError } = {}) {
   return client;
 }
 
-export function subscribeChatRoom(client, chatRoomId, onMessage) {
-  if (!client || !chatRoomId) {
-    debugLog("SUBSCRIBE_CHATROOM_SKIPPED", { hasClient: Boolean(client), chatRoomId });
+export function subscribeChatRoom(client, chatRoomId, currentUserId, onMessage) {
+  if (!client || !chatRoomId || !currentUserId) {
+    debugLog("SUBSCRIBE_CHATROOM_SKIPPED", { hasClient: Boolean(client), chatRoomId, currentUserId });
     return null;
   }
 
@@ -110,9 +110,15 @@ export function subscribeChatRoom(client, chatRoomId, onMessage) {
   return client.subscribe(`/topic/chatrooms/${chatRoomId}`, (frame) => {
     const payload = parsePayload(frame.body);
     const message = payload?.delivery?.message;
+    const translatedContent = (payload?.delivery?.translations || [])
+      .find((translation) => Number(translation?.userId) === Number(currentUserId))
+      ?.translatedContent || null;
     debugLog("CHAT_EVENT_FRAME", message?.id || "-", message?.chatRoomId || "-");
     if (message && typeof onMessage === 'function') {
-      onMessage(message);
+      onMessage({
+        ...message,
+        translatedContent,
+      });
     }
   });
 }
