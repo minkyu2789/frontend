@@ -10,6 +10,7 @@ const STEP_KEYWORDS = 1;
 const STEP_TRIP = 2;
 const STEP_PROFILE = 3;
 const STEP_COUNT = 4;
+const KEYWORD_PAGE_SIZE = 10;
 
 function normalizeLiteral(value) {
   return String(value || "").trim().toLowerCase();
@@ -52,6 +53,7 @@ export function SignUpScreen({ navigation }) {
 
   const [cities, setCities] = useState([]);
   const [keywords, setKeywords] = useState([]);
+  const [visibleKeywordCount, setVisibleKeywordCount] = useState(KEYWORD_PAGE_SIZE);
 
   const [residenceQuery, setResidenceQuery] = useState("");
   const [selectedResidenceCity, setSelectedResidenceCity] = useState(null);
@@ -81,6 +83,12 @@ export function SignUpScreen({ navigation }) {
     return `${selectedKeywordIds.length}개 선택`;
   }, [selectedKeywordIds.length]);
 
+  const visibleKeywords = useMemo(
+    () => keywords.slice(0, visibleKeywordCount),
+    [keywords, visibleKeywordCount],
+  );
+  const canLoadMoreKeywords = visibleKeywordCount < keywords.length;
+
   useEffect(() => {
     let mounted = true;
 
@@ -104,6 +112,7 @@ export function SignUpScreen({ navigation }) {
 
         setCities(dedupedCities);
         setKeywords(loadedKeywords);
+        setVisibleKeywordCount(KEYWORD_PAGE_SIZE);
       } catch {
         if (!mounted) {
           return;
@@ -111,6 +120,7 @@ export function SignUpScreen({ navigation }) {
 
         setCities([]);
         setKeywords([]);
+        setVisibleKeywordCount(KEYWORD_PAGE_SIZE);
       }
     }
 
@@ -160,6 +170,10 @@ export function SignUpScreen({ navigation }) {
 
       return [...previous, keywordId];
     });
+  }
+
+  function handleLoadMoreKeywords() {
+    setVisibleKeywordCount((previous) => Math.min(previous + KEYWORD_PAGE_SIZE, keywords.length));
   }
 
   function validateCurrentStep() {
@@ -317,7 +331,7 @@ export function SignUpScreen({ navigation }) {
           <Text style={styles.helper}>중복 선택 가능 · {keywordCountLabel}</Text>
 
           <View style={styles.keywordWrap}>
-            {keywords.map((keyword) => {
+            {visibleKeywords.map((keyword) => {
               const active = selectedKeywordIds.includes(keyword.id);
               return (
                 <Pressable
@@ -332,6 +346,11 @@ export function SignUpScreen({ navigation }) {
               );
             })}
           </View>
+          {canLoadMoreKeywords ? (
+            <Pressable style={styles.keywordMoreButton} onPress={handleLoadMoreKeywords}>
+              <Text style={styles.keywordMoreButtonText}>키워드 더 보기</Text>
+            </Pressable>
+          ) : null}
         </View>
       ) : null}
 
@@ -528,18 +547,20 @@ const styles = StyleSheet.create({
     textAlignVertical: "top",
   },
   keywordWrap: {
-    marginTop: 4,
+    marginTop: 8,
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 8,
+    gap: 10,
   },
   keywordChip: {
     borderRadius: 999,
     borderWidth: 1,
     borderColor: "#D8E2F5",
     backgroundColor: "#F3F7FF",
-    paddingHorizontal: 12,
-    paddingVertical: 7,
+    minHeight: 44,
+    paddingHorizontal: 16,
+    paddingVertical: 11,
+    justifyContent: "center",
   },
   keywordChipActive: {
     borderColor: "#1C73F0",
@@ -547,11 +568,22 @@ const styles = StyleSheet.create({
   },
   keywordChipText: {
     color: "#34466C",
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "700",
   },
   keywordChipTextActive: {
     color: "#145FCA",
+  },
+  keywordMoreButton: {
+    alignSelf: "center",
+    marginTop: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+  },
+  keywordMoreButtonText: {
+    color: "#5E6983",
+    fontSize: 13,
+    fontWeight: "700",
   },
   sexRow: {
     flexDirection: "row",
