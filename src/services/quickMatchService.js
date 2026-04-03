@@ -1,9 +1,8 @@
 import { get, post } from '../api/httpClient';
 
-export function fetchQuickMatches({ cityId, targetType } = {}) {
+export function fetchQuickMatches({ cityId } = {}) {
   return get('/quick-matches', {
     cityId,
-    targetType,
   });
 }
 
@@ -11,11 +10,10 @@ export function fetchQuickMatch(quickMatchId) {
   return get(`/quick-matches/${quickMatchId}`);
 }
 
-export function createQuickMatch({ cityId, message, targetType = 'ANY' }) {
+export function createQuickMatch({ cityId, message }) {
   return post('/quick-matches', {
     cityId,
     message,
-    targetType,
   });
 }
 
