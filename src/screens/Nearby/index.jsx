@@ -60,6 +60,22 @@ function toCoordinateValue(value) {
   return Number.isFinite(num) ? num : null;
 }
 
+function isValidCoordinatePair(latitude, longitude) {
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+    return false;
+  }
+
+  if (Math.abs(latitude) > 90 || Math.abs(longitude) > 180) {
+    return false;
+  }
+
+  if (Math.abs(latitude) < 0.0001 && Math.abs(longitude) < 0.0001) {
+    return false;
+  }
+
+  return true;
+}
+
 function toMinglePhaseLabel(createdDateTime) {
   if (!createdDateTime) {
     return "기록";
@@ -90,6 +106,18 @@ export function Nearby({ route }) {
   });
 
   const cityId = Number(route?.params?.cityId);
+  const cityLatitude = toCoordinateValue(route?.params?.cityLatitude);
+  const cityLongitude = toCoordinateValue(route?.params?.cityLongitude);
+  const cityCenter = useMemo(() => {
+    if (!isValidCoordinatePair(cityLatitude, cityLongitude)) {
+      return null;
+    }
+
+    return {
+      latitude: cityLatitude,
+      longitude: cityLongitude,
+    };
+  }, [cityLatitude, cityLongitude]);
   const currentUserId = useMemo(() => decodeUserIdFromToken(token), [token]);
 
   const nearbyProfiles = useMemo(() => {
@@ -135,7 +163,7 @@ export function Nearby({ route }) {
       .map((row) => {
         const latitude = toCoordinateValue(row?.mingle?.latitude);
         const longitude = toCoordinateValue(row?.mingle?.longitude);
-        if (latitude == null || longitude == null) {
+        if (!isValidCoordinatePair(latitude, longitude)) {
           return null;
         }
 
@@ -162,6 +190,15 @@ export function Nearby({ route }) {
       };
     }
 
+    if (cityCenter) {
+      return {
+        latitude: cityCenter.latitude,
+        longitude: cityCenter.longitude,
+        latitudeDelta: 0.18,
+        longitudeDelta: 0.18,
+      };
+    }
+
     if (mingleMarkers.length === 0) {
       return {
         latitude: 37.5665,
@@ -177,7 +214,7 @@ export function Nearby({ route }) {
       latitudeDelta: 0.08,
       longitudeDelta: 0.08,
     };
-  }, [mingleMarkers, selectedMingleId]);
+  }, [cityCenter, mingleMarkers, selectedMingleId]);
 
   const loadNearby = useCallback(async () => {
     setLoading(true);

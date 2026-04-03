@@ -82,6 +82,54 @@ function ChipRow({ activeId, onSelect }) {
   );
 }
 
+function toCoordinateValue(value) {
+  const num = Number(value);
+  return Number.isFinite(num) ? num : null;
+}
+
+function isValidCoordinatePair(latitude, longitude) {
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+    return false;
+  }
+
+  if (Math.abs(latitude) > 90 || Math.abs(longitude) > 180) {
+    return false;
+  }
+
+  if (Math.abs(latitude) < 0.0001 && Math.abs(longitude) < 0.0001) {
+    return false;
+  }
+
+  return true;
+}
+
+function resolveCityCenter(city, placesByType) {
+  const cityLatitude = toCoordinateValue(city?.latitude ?? city?.lat);
+  const cityLongitude = toCoordinateValue(city?.longitude ?? city?.lng);
+  if (isValidCoordinatePair(cityLatitude, cityLongitude)) {
+    return { latitude: cityLatitude, longitude: cityLongitude };
+  }
+
+  const candidatePlaces = [
+    ...(placesByType?.restaurant ?? []),
+    ...(placesByType?.cafe ?? []),
+  ];
+  const placeWithCoordinate = candidatePlaces.find((place) => {
+    const latitude = toCoordinateValue(place?.latitude ?? place?.lat);
+    const longitude = toCoordinateValue(place?.longitude ?? place?.lng);
+    return isValidCoordinatePair(latitude, longitude);
+  });
+
+  if (!placeWithCoordinate) {
+    return null;
+  }
+
+  return {
+    latitude: toCoordinateValue(placeWithCoordinate?.latitude ?? placeWithCoordinate?.lat),
+    longitude: toCoordinateValue(placeWithCoordinate?.longitude ?? placeWithCoordinate?.lng),
+  };
+}
+
 export function MainScreen() {
   const navigation = useNavigation();
   const { token, logout } = useAuth();
@@ -396,6 +444,10 @@ export function MainScreen() {
 
   const visiblePlaces = places.slice(0, 3);
   const quickMatchEnabled = Boolean(selectedCity?.id);
+  const nearbyCityCenter = useMemo(
+    () => resolveCityCenter(selectedCity, placesByType),
+    [placesByType, selectedCity],
+  );
   const localMarkers = useMemo(() => {
     return localMingleRows
       .map((row) => {
@@ -501,7 +553,11 @@ export function MainScreen() {
           <View style={styles.quickRow}>
             <TouchableWithoutFeedback
               onPress={() =>
-                navigation.navigate("Nearby", { cityId: selectedCity?.id })
+                navigation.navigate("Nearby", {
+                  cityId: selectedCity?.id,
+                  cityLatitude: nearbyCityCenter?.latitude ?? null,
+                  cityLongitude: nearbyCityCenter?.longitude ?? null,
+                })
               }
             >
               <View style={styles.nearbyCard}>
