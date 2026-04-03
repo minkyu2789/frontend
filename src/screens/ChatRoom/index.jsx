@@ -13,6 +13,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../../auth";
 import { decodeUserIdFromToken } from "../../auth/userId";
+import { useLocale } from "../../locale";
 import {
   fetchChatMessages,
   fetchChatRoom,
@@ -27,7 +28,7 @@ import {
 
 const PENDING_TIMEOUT_MS = 20000;
 
-function formatClock(value) {
+function formatClock(value, locale) {
   if (!value) {
     return "";
   }
@@ -37,7 +38,7 @@ function formatClock(value) {
     return "";
   }
 
-  return new Intl.DateTimeFormat("ko-KR", {
+  return new Intl.DateTimeFormat(locale === "ko" ? "ko-KR" : "en-US", {
     hour: "2-digit",
     minute: "2-digit",
   }).format(date);
@@ -59,6 +60,7 @@ function uniqueMessages(messages) {
 
 export function ChatRoom({ navigation, route }) {
   const { token } = useAuth();
+  const { tx, locale } = useLocale();
   const userId = useMemo(() => decodeUserIdFromToken(token), [token]);
   const chatRoomId = Number(route?.params?.chatRoomId);
   const clientRef = useRef(null);
@@ -111,7 +113,7 @@ export function ChatRoom({ navigation, route }) {
 
   const roomTitle = useMemo(() => {
     if (!chatRoom) {
-      return "채팅";
+      return tx("채팅", "Chat");
     }
 
     if (chatRoom.name) {
@@ -127,8 +129,8 @@ export function ChatRoom({ navigation, route }) {
       }
     }
 
-    return `채팅방 #${chatRoom.id}`;
-  }, [chatRoom, userId, usersById]);
+    return tx(`채팅방 #${chatRoom.id}`, `Chat #${chatRoom.id}`);
+  }, [chatRoom, tx, userId, usersById]);
 
   const headerAvatar = useMemo(() => {
     const participantIds = (chatRoom?.participantUserIds ?? []).filter(
@@ -155,7 +157,7 @@ export function ChatRoom({ navigation, route }) {
 
   const loadChatRoom = useCallback(async () => {
     if (!Number.isFinite(chatRoomId) || chatRoomId <= 0) {
-      setError("유효한 채팅방 정보가 없습니다.");
+      setError(tx("유효한 채팅방 정보가 없습니다.", "Invalid chat room."));
       return;
     }
 
@@ -187,11 +189,11 @@ export function ChatRoom({ navigation, route }) {
       setPendingMessages([]);
       setUsersById({});
       clearAllPendingTimeouts();
-      setError(requestError?.message || "채팅 정보를 불러오지 못했습니다.");
+      setError(requestError?.message || tx("채팅 정보를 불러오지 못했습니다.", "Failed to load chat."));
     } finally {
       setLoading(false);
     }
-  }, [chatRoomId]);
+  }, [chatRoomId, tx]);
 
   useEffect(() => {
     loadChatRoom();
@@ -326,7 +328,7 @@ export function ChatRoom({ navigation, route }) {
     }
 
     if (!clientRef.current?.connected) {
-      setSocketError("소켓 연결이 아직 준비되지 않았습니다.");
+      setSocketError(tx("소켓 연결이 아직 준비되지 않았습니다.", "Socket is not ready yet."));
       return;
     }
 
@@ -344,7 +346,7 @@ export function ChatRoom({ navigation, route }) {
             : item,
         ),
       );
-      setSocketError("메시지 전송에 실패했습니다.");
+      setSocketError(tx("메시지 전송에 실패했습니다.", "Failed to send message."));
     }
   }
 
@@ -413,9 +415,7 @@ export function ChatRoom({ navigation, route }) {
         </Text>
       </View>
 
-      {loading ? (
-        <Text style={styles.metaText}>메시지를 불러오는 중...</Text>
-      ) : null}
+      {loading ? <Text style={styles.metaText}>{tx("메시지를 불러오는 중...", "Loading messages...")}</Text> : null}
       {error ? <Text style={styles.errorText}>{error}</Text> : null}
       {socketError ? <Text style={styles.errorText}>{socketError}</Text> : null}
 
@@ -462,7 +462,7 @@ export function ChatRoom({ navigation, route }) {
                           : styles.messageLabelTranslatedOther,
                       ]}
                     >
-                      번역
+                      {tx("번역", "Translated")}
                     </Text>
                   ) : null}
                   <Text
@@ -493,7 +493,7 @@ export function ChatRoom({ navigation, route }) {
                           : styles.messageLabelOriginalOther,
                       ]}
                     >
-                      원문
+                      {tx("원문", "Original")}
                     </Text>
                     <Text
                       style={[
@@ -513,13 +513,13 @@ export function ChatRoom({ navigation, route }) {
                         isFailed && styles.pendingTextFailed,
                       ]}
                     >
-                      {isFailed ? "전송 실패" : "번역 및 전송 중..."}
+                      {isFailed ? tx("전송 실패", "Send failed") : tx("번역 및 전송 중...", "Translating and sending...")}
                     </Text>
                     {isFailed ? (
                       <Pressable
                         onPress={() => handleRetryPending(item.localId)}
                       >
-                        <Text style={styles.pendingRetryText}>재시도</Text>
+                        <Text style={styles.pendingRetryText}>{tx("재시도", "Retry")}</Text>
                       </Pressable>
                     ) : null}
                   </View>
@@ -527,7 +527,7 @@ export function ChatRoom({ navigation, route }) {
                 <Text
                   style={[styles.messageTime, mine && styles.messageTimeMine]}
                 >
-                  {formatClock(item.createdDateTime)}
+                  {formatClock(item.createdDateTime, locale)}
                 </Text>
               </View>
             </View>
@@ -535,7 +535,7 @@ export function ChatRoom({ navigation, route }) {
         }}
         ListEmptyComponent={
           !loading ? (
-            <Text style={styles.metaText}>메시지가 없습니다.</Text>
+            <Text style={styles.metaText}>{tx("메시지가 없습니다.", "No messages yet.")}</Text>
           ) : null
         }
       />
@@ -545,7 +545,8 @@ export function ChatRoom({ navigation, route }) {
           style={styles.input}
           value={input}
           onChangeText={setInput}
-          placeholder="메시지 입력"
+          placeholder={tx("메시지 입력", "Type a message")}
+          placeholderTextColor="#9CA3AF"
           editable={Boolean(chatRoomId)}
           multiline={false}
           returnKeyType="send"
@@ -564,7 +565,7 @@ export function ChatRoom({ navigation, route }) {
       </View>
       {hasPendingTranslation ? (
         <Text style={styles.sendingHintText}>
-          메시지를 번역 중입니다. 잠시만 기다려주세요.
+          {tx("메시지를 번역 중입니다. 잠시만 기다려주세요.", "Translating message. Please wait.")}
         </Text>
       ) : null}
     </KeyboardAvoidingView>
