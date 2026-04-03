@@ -184,7 +184,9 @@ export function MyPage({ navigation }) {
               <View key={trip.id} style={styles.tripCard}>
                 <View style={styles.tripHead}>
                   <TravelIcon />
-                  <DirectionBlack />
+                  <Pressable onPress={() => navigation.navigate("CreateTrip", { tripId: trip.id })}>
+                    <DirectionBlack />
+                  </Pressable>
                 </View>
                 <Text style={styles.tripTitle}>{getCityNameKo(tripCity)}</Text>
                 <Text style={styles.tripMeta}>{getTripMetaText(trip)}</Text>
