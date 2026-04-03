@@ -3,16 +3,64 @@ import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 
 import { useFocusEffect } from "@react-navigation/native";
 import MapView, { Marker } from "react-native-maps";
 import { Ionicons } from "@expo/vector-icons";
+import { Calendar } from "react-native-calendars";
 import { useAuth } from "../../auth";
 import { decodeUserIdFromToken } from "../../auth/userId";
 import { createMingle, fetchMingleMinglers, fetchMingles, joinMingle, leaveMingle } from "../../services/mingleService";
 import { fetchGooglePlaceDetails, searchGooglePlaces } from "../../services/googlePlacesService";
  
 const GROUP_SIZE_FILTER_ALL = "ALL";
-const GROUP_SIZE_FILTER_1 = "1";
 const GROUP_SIZE_FILTER_2 = "2";
-const GROUP_SIZE_FILTER_2PLUS = "2+";
-const TARGET_PARTICIPANT_OPTIONS = [1, 2, 3, 4];
+const GROUP_SIZE_FILTER_3 = "3";
+const GROUP_SIZE_FILTER_4 = "4";
+const GROUP_SIZE_FILTER_5PLUS = "5+";
+const TARGET_PARTICIPANT_OPTIONS = [2, 3, 4, 5];
+
+function pad2(value) {
+  return String(value).padStart(2, "0");
+}
+
+function buildDefaultMeetDateTime() {
+  const now = new Date();
+  const date = new Date(now);
+  date.setMinutes(0, 0, 0);
+  date.setHours(now.getHours() + 1);
+  return date;
+}
+
+function toLocalDateTimeString(value) {
+  if (!(value instanceof Date) || Number.isNaN(value.getTime())) {
+    return null;
+  }
+
+  return `${value.getFullYear()}-${pad2(value.getMonth() + 1)}-${pad2(value.getDate())}T${pad2(value.getHours())}:${pad2(value.getMinutes())}:00`;
+}
+
+function toCalendarDateKey(value) {
+  if (!(value instanceof Date) || Number.isNaN(value.getTime())) {
+    return "";
+  }
+  return `${value.getFullYear()}-${pad2(value.getMonth() + 1)}-${pad2(value.getDate())}`;
+}
+
+function toMeetDateTimeLabel(value) {
+  if (!(value instanceof Date) || Number.isNaN(value.getTime())) {
+    return "언제 만날까요?";
+  }
+
+  return new Intl.DateTimeFormat("ko-KR", {
+    month: "short",
+    day: "numeric",
+    weekday: "short",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: false,
+  }).format(value);
+}
+
+function toTargetCountLabel(count) {
+  return count >= 5 ? "5+" : String(count);
+}
 
 function toRelativeTimeLabel(isoString) {
   if (!isoString) {
@@ -74,13 +122,15 @@ export function Nearby({ route }) {
   const [drawerVisible, setDrawerVisible] = useState(true);
   const [createModalVisible, setCreateModalVisible] = useState(false);
   const [createSubmitting, setCreateSubmitting] = useState(false);
+  const [dateTimeModalVisible, setDateTimeModalVisible] = useState(false);
+  const [dateTimeDraft, setDateTimeDraft] = useState(() => buildDefaultMeetDateTime());
   const [createForm, setCreateForm] = useState({
     title: "",
     description: "",
     placeName: "",
     latitude: null,
     longitude: null,
-    meetDateTime: "",
+    meetDateTime: buildDefaultMeetDateTime(),
     targetParticipantCount: 2,
   });
   const [placeQuery, setPlaceQuery] = useState("");
@@ -117,13 +167,16 @@ export function Nearby({ route }) {
       const count = Number.isFinite(targetCount) && targetCount > 0
         ? targetCount
         : (row?.minglers?.length ?? 0);
-      if (groupSizeFilter === GROUP_SIZE_FILTER_1) {
-        return count === 1;
-      }
       if (groupSizeFilter === GROUP_SIZE_FILTER_2) {
         return count === 2;
       }
-      return count >= 2;
+      if (groupSizeFilter === GROUP_SIZE_FILTER_3) {
+        return count === 3;
+      }
+      if (groupSizeFilter === GROUP_SIZE_FILTER_4) {
+        return count === 4;
+      }
+      return count >= 5;
     });
   }, [groupSizeFilter, mingleRows]);
 
@@ -260,9 +313,10 @@ export function Nearby({ route }) {
       placeName: "",
       latitude: null,
       longitude: null,
-      meetDateTime: "",
+      meetDateTime: buildDefaultMeetDateTime(),
       targetParticipantCount: 2,
     });
+    setDateTimeDraft(buildDefaultMeetDateTime());
     setPlaceQuery("");
     setPlaceSuggestions([]);
     setPlaceSearchError(null);
@@ -348,6 +402,66 @@ export function Nearby({ route }) {
     }
   }
 
+  function openDateTimeModal() {
+    const baseDate =
+      createForm.meetDateTime instanceof Date && !Number.isNaN(createForm.meetDateTime.getTime())
+        ? createForm.meetDateTime
+        : buildDefaultMeetDateTime();
+    setDateTimeDraft(new Date(baseDate));
+    setDateTimeModalVisible(true);
+  }
+
+  function handleDateSelected(day) {
+    const [year, month, date] = String(day?.dateString || "")
+      .split("-")
+      .map((value) => Number(value));
+    if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(date)) {
+      return;
+    }
+
+    setDateTimeDraft((prev) => {
+      const next = new Date(prev);
+      next.setFullYear(year, month - 1, date);
+      return next;
+    });
+  }
+
+  function adjustDraftHour(delta) {
+    setDateTimeDraft((prev) => {
+      const next = new Date(prev);
+      const hour = (next.getHours() + delta + 24) % 24;
+      next.setHours(hour);
+      return next;
+    });
+  }
+
+  function adjustDraftMinute(delta) {
+    setDateTimeDraft((prev) => {
+      const next = new Date(prev);
+      const minute = next.getMinutes() + delta;
+      if (minute < 0) {
+        next.setHours((next.getHours() + 23) % 24);
+        next.setMinutes(30);
+        return next;
+      }
+      if (minute >= 60) {
+        next.setHours((next.getHours() + 1) % 24);
+        next.setMinutes(0);
+        return next;
+      }
+      next.setMinutes(minute);
+      return next;
+    });
+  }
+
+  function confirmDateTimeSelection() {
+    setCreateForm((prev) => ({
+      ...prev,
+      meetDateTime: new Date(dateTimeDraft),
+    }));
+    setDateTimeModalVisible(false);
+  }
+
   async function handleCreateMingle() {
     const title = String(createForm.title || "").trim();
     if (!cityId || !title) {
@@ -372,7 +486,7 @@ export function Nearby({ route }) {
         title,
         description: String(createForm.description || "").trim() || null,
         placeName: placeName || null,
-        meetDateTime: String(createForm.meetDateTime || "").trim() || null,
+        meetDateTime: toLocalDateTimeString(createForm.meetDateTime),
         latitude: placeName ? createForm.latitude : null,
         longitude: placeName ? createForm.longitude : null,
         targetParticipantCount: Number(createForm.targetParticipantCount) || null,
@@ -406,9 +520,10 @@ export function Nearby({ route }) {
           <View style={styles.groupFilterRow}>
             {[
               GROUP_SIZE_FILTER_ALL,
-              GROUP_SIZE_FILTER_1,
               GROUP_SIZE_FILTER_2,
-              GROUP_SIZE_FILTER_2PLUS,
+              GROUP_SIZE_FILTER_3,
+              GROUP_SIZE_FILTER_4,
+              GROUP_SIZE_FILTER_5PLUS,
             ].map((filter) => {
               const active = groupSizeFilter === filter;
               return (
@@ -418,7 +533,7 @@ export function Nearby({ route }) {
                   onPress={() => setGroupSizeFilter(filter)}
                 >
                   <Text style={[styles.groupFilterText, active && styles.groupFilterTextActive]}>
-                    {filter === GROUP_SIZE_FILTER_ALL ? "전체" : `${filter}인`}
+                    {filter === GROUP_SIZE_FILTER_ALL ? "전체" : `${filter}명`}
                   </Text>
                 </Pressable>
               );
@@ -459,6 +574,8 @@ export function Nearby({ route }) {
               const placeNameText = row?.mingle?.placeName || "장소 미정";
               const targetCount = Number(row?.mingle?.targetParticipantCount);
               const wantedCount = Number.isFinite(targetCount) && targetCount > 0 ? targetCount : null;
+              const currentCount = row?.minglers?.length ?? 0;
+              const totalCountLabel = wantedCount ? `${toTargetCountLabel(wantedCount)}명` : null;
 
               return (
                 <Pressable
@@ -474,8 +591,8 @@ export function Nearby({ route }) {
                     </Text>
                     <Text style={styles.placeText}>📍 {placeNameText}</Text>
                     <Text style={styles.meetText}>🕒 {meetAtText}</Text>
-                    {wantedCount ? <Text style={styles.countText}>원하는 인원 {wantedCount}명</Text> : null}
-                    <Text style={styles.countText}>참여 중 {minglerCount}명</Text>
+                    {wantedCount ? <Text style={styles.countText}>인원 {currentCount}/{totalCountLabel}</Text> : null}
+                    {!wantedCount ? <Text style={styles.countText}>참여 중 {minglerCount}명</Text> : null}
                   </View>
                   <Pressable
                     style={[styles.actionButton, joined && styles.actionButtonActive]}
@@ -569,18 +686,19 @@ export function Nearby({ route }) {
                 선택된 위치: {createForm.latitude.toFixed(5)}, {createForm.longitude.toFixed(5)}
               </Text>
             ) : null}
-            <TextInput
-              style={styles.formInput}
-              value={createForm.meetDateTime}
-              onChangeText={(value) => setCreateForm((prev) => ({ ...prev, meetDateTime: value }))}
-              placeholder="언제 만날까요? 예: 2026-04-05T19:30:00 (선택)"
-            />
+            <Pressable style={styles.dateTimeField} onPress={openDateTimeModal}>
+              <View style={styles.dateTimeFieldTextWrap}>
+                <Text style={styles.dateTimeFieldLabel}>언제 만날까요?</Text>
+                <Text style={styles.dateTimeFieldValue}>{toMeetDateTimeLabel(createForm.meetDateTime)}</Text>
+              </View>
+              <Ionicons name="calendar-outline" size={18} color="#1C73F0" />
+            </Pressable>
             <View style={styles.targetCountWrap}>
-              <Text style={styles.targetCountLabel}>원하는 인원</Text>
+              <Text style={styles.targetCountLabel}>총 인원</Text>
               <View style={styles.targetCountRow}>
                 {TARGET_PARTICIPANT_OPTIONS.map((count) => {
                   const selected = Number(createForm.targetParticipantCount) === count;
-                  const label = count === 4 ? "4+" : `${count}`;
+                  const label = toTargetCountLabel(count);
                   return (
                     <Pressable
                       key={count}
@@ -610,6 +728,61 @@ export function Nearby({ route }) {
               <Text style={styles.drawerPrimaryButtonText}>{createSubmitting ? "생성 중..." : "밍글 생성"}</Text>
             </Pressable>
             <Pressable style={styles.drawerSecondaryButton} onPress={() => setCreateModalVisible(false)} disabled={createSubmitting}>
+              <Text style={styles.drawerSecondaryButtonText}>취소</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={dateTimeModalVisible} transparent animationType="fade" onRequestClose={() => setDateTimeModalVisible(false)}>
+        <View style={styles.drawerOverlay}>
+          <View style={styles.dateTimeModalCard}>
+            <Text style={styles.drawerTitle}>날짜와 시간 선택</Text>
+            <Calendar
+              current={toCalendarDateKey(dateTimeDraft)}
+              markedDates={{
+                [toCalendarDateKey(dateTimeDraft)]: {
+                  selected: true,
+                  selectedColor: "#1C73F0",
+                },
+              }}
+              onDayPress={handleDateSelected}
+              theme={{
+                selectedDayBackgroundColor: "#1C73F0",
+                todayTextColor: "#1C73F0",
+                arrowColor: "#1C73F0",
+              }}
+            />
+            <View style={styles.timeAdjustWrap}>
+              <View style={styles.timeAdjustCard}>
+                <Text style={styles.timeAdjustLabel}>시</Text>
+                <View style={styles.timeAdjustRow}>
+                  <Pressable style={styles.timeAdjustButton} onPress={() => adjustDraftHour(-1)}>
+                    <Ionicons name="remove" size={16} color="#334155" />
+                  </Pressable>
+                  <Text style={styles.timeAdjustValue}>{pad2(dateTimeDraft.getHours())}</Text>
+                  <Pressable style={styles.timeAdjustButton} onPress={() => adjustDraftHour(1)}>
+                    <Ionicons name="add" size={16} color="#334155" />
+                  </Pressable>
+                </View>
+              </View>
+              <View style={styles.timeAdjustCard}>
+                <Text style={styles.timeAdjustLabel}>분</Text>
+                <View style={styles.timeAdjustRow}>
+                  <Pressable style={styles.timeAdjustButton} onPress={() => adjustDraftMinute(-30)}>
+                    <Ionicons name="remove" size={16} color="#334155" />
+                  </Pressable>
+                  <Text style={styles.timeAdjustValue}>{pad2(dateTimeDraft.getMinutes())}</Text>
+                  <Pressable style={styles.timeAdjustButton} onPress={() => adjustDraftMinute(30)}>
+                    <Ionicons name="add" size={16} color="#334155" />
+                  </Pressable>
+                </View>
+              </View>
+            </View>
+            <Pressable style={styles.drawerPrimaryButton} onPress={confirmDateTimeSelection}>
+              <Text style={styles.drawerPrimaryButtonText}>적용</Text>
+            </Pressable>
+            <Pressable style={styles.drawerSecondaryButton} onPress={() => setDateTimeModalVisible(false)}>
               <Text style={styles.drawerSecondaryButtonText}>취소</Text>
             </Pressable>
           </View>
@@ -869,6 +1042,81 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFFFFF",
     fontSize: 13,
     color: "#111827",
+  },
+  dateTimeField: {
+    minHeight: 46,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#D5DEEB",
+    paddingHorizontal: 12,
+    backgroundColor: "#FFFFFF",
+    alignItems: "center",
+    justifyContent: "space-between",
+    flexDirection: "row",
+    gap: 10,
+  },
+  dateTimeFieldTextWrap: {
+    flex: 1,
+    gap: 2,
+  },
+  dateTimeFieldLabel: {
+    color: "#64748B",
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  dateTimeFieldValue: {
+    color: "#111827",
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  dateTimeModalCard: {
+    backgroundColor: "#FFFFFF",
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingHorizontal: 18,
+    paddingTop: 16,
+    paddingBottom: 26,
+    gap: 12,
+  },
+  timeAdjustWrap: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  timeAdjustCard: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: "#D7DFEC",
+    borderRadius: 12,
+    padding: 10,
+    gap: 8,
+    backgroundColor: "#F8FAFC",
+  },
+  timeAdjustLabel: {
+    color: "#475569",
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  timeAdjustRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  timeAdjustButton: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#D7DFEC",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  timeAdjustValue: {
+    color: "#0F172A",
+    fontSize: 18,
+    fontWeight: "800",
+    minWidth: 32,
+    textAlign: "center",
   },
   placeSuggestionList: {
     borderRadius: 12,
