@@ -11,12 +11,13 @@ import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import { useAuth } from "../../auth";
 import { decodeUserIdFromToken } from "../../auth/userId";
+import { useLocale } from "../../locale";
 import { fetchChatRooms, fetchUsers } from "../../services";
 
 const TAB_LOCAL = "LOCAL";
 const TAB_TRAVELER = "TRAVELER";
 
-function formatRoomTime(value) {
+function formatRoomTime(value, locale) {
   if (!value) {
     return "";
   }
@@ -26,7 +27,7 @@ function formatRoomTime(value) {
     return "";
   }
 
-  return new Intl.DateTimeFormat("ko-KR", {
+  return new Intl.DateTimeFormat(locale === "ko" ? "ko-KR" : "en-US", {
     month: "2-digit",
     day: "2-digit",
     hour: "2-digit",
@@ -34,16 +35,17 @@ function formatRoomTime(value) {
   }).format(date);
 }
 
-function roomSubtitle(room) {
+function roomSubtitle(room, tx) {
   if (room.directChat) {
-    return "1:1 밍글 채팅";
+    return tx("1:1 밍글 채팅", "1:1 Chat");
   }
 
-  return room.mingleId ? "여행 밍글 채팅" : "그룹 채팅";
+  return room.mingleId ? tx("여행 밍글 채팅", "Trip Chat") : tx("그룹 채팅", "Group Chat");
 }
 
 export function Chats({ navigation, route }) {
   const { token } = useAuth();
+  const { tx, locale } = useLocale();
   const userId = useMemo(() => decodeUserIdFromToken(token), [token]);
   const [rooms, setRooms] = useState([]);
   const [usersById, setUsersById] = useState({});
@@ -77,9 +79,9 @@ export function Chats({ navigation, route }) {
         }
       }
 
-      return `채팅방 #${room?.id}`;
+      return tx(`채팅방 #${room?.id}`, `Chat #${room?.id}`);
     },
-    [userId, usersById],
+    [tx, userId, usersById],
   );
 
   const roomAvatarData = useCallback(
@@ -123,11 +125,11 @@ export function Chats({ navigation, route }) {
     } catch (requestError) {
       setRooms([]);
       setUsersById({});
-      setError(requestError?.message || "채팅방을 불러오지 못했습니다.");
+      setError(requestError?.message || tx("채팅방을 불러오지 못했습니다.", "Failed to load chat rooms."));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [tx]);
 
   useFocusEffect(
     useCallback(() => {
@@ -156,7 +158,7 @@ export function Chats({ navigation, route }) {
   return (
     <View style={styles.container}>
       <View style={styles.headerRow}>
-        <Text style={styles.headerTitle}>채팅</Text>
+        <Text style={styles.headerTitle}>{tx("채팅", "Chats")}</Text>
         <Pressable onPress={loadRooms} style={styles.refreshButton}>
           <Ionicons name="refresh" size={18} color="#1C73F0" />
         </Pressable>
@@ -176,7 +178,7 @@ export function Chats({ navigation, route }) {
               activeTab === TAB_LOCAL && styles.tabTextActive,
             ]}
           >
-            로컬 밍글러
+            {tx("로컬 밍글러", "Local")}
           </Text>
         </Pressable>
         <Pressable
@@ -192,12 +194,12 @@ export function Chats({ navigation, route }) {
               activeTab === TAB_TRAVELER && styles.tabTextActive,
             ]}
           >
-            여행자 밍글러
+            {tx("여행자 밍글러", "Traveler")}
           </Text>
         </Pressable>
       </View>
 
-      {loading ? <Text style={styles.metaText}>불러오는 중...</Text> : null}
+      {loading ? <Text style={styles.metaText}>{tx("불러오는 중...", "Loading...")}</Text> : null}
       {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
       <FlatList
@@ -235,7 +237,7 @@ export function Chats({ navigation, route }) {
                   </Text>
                   <View style={styles.roomMetaWrap}>
                     <Text style={styles.roomTime}>
-                      {formatRoomTime(item.updatedDateTime)}
+                      {formatRoomTime(item.updatedDateTime, locale)}
                     </Text>
                     {Number(item?.unreadMessageCount || 0) > 0 ? (
                       <View style={styles.unreadBadge}>
@@ -249,7 +251,7 @@ export function Chats({ navigation, route }) {
                   </View>
                 </View>
                 <Text style={styles.roomSubtitle} numberOfLines={1}>
-                  {roomSubtitle(item)}
+                  {roomSubtitle(item, tx)}
                 </Text>
               </View>
             </Pressable>
@@ -257,7 +259,7 @@ export function Chats({ navigation, route }) {
         }}
         ListEmptyComponent={
           !loading ? (
-            <Text style={styles.metaText}>표시할 채팅방이 없습니다.</Text>
+            <Text style={styles.metaText}>{tx("표시할 채팅방이 없습니다.", "No chat rooms yet.")}</Text>
           ) : null
         }
       />
