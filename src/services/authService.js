@@ -19,6 +19,7 @@ export async function signup({
   phone,
   sex,
   introduction,
+  profileImageUrl,
   nationalityId,
   keywordIds = [],
 }) {
@@ -30,6 +31,7 @@ export async function signup({
     phone,
     sex,
     introduction,
+    profileImageUrl,
     nationalityId,
     keywordIds,
   });
