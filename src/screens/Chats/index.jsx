@@ -62,6 +62,7 @@ export function Chats({ route }) {
   const [messagesLoading, setMessagesLoading] = useState(false);
   const [socketReady, setSocketReady] = useState(false);
   const [error, setError] = useState(null);
+  const [socketError, setSocketError] = useState(null);
 
   const selectedRoom = useMemo(
     () => rooms.find((room) => room.id === selectedRoomId) || null,
@@ -175,8 +176,14 @@ export function Chats({ route }) {
 
   useEffect(() => {
     const client = createChatSocketClient({
-      onConnect: () => setSocketReady(true),
-      onError: (message) => setError(message),
+      onConnect: () => {
+        setSocketReady(true);
+        setSocketError(null);
+      },
+      onError: (message) => {
+        setSocketReady(false);
+        setSocketError(message || "WebSocket connection error");
+      },
     });
 
     clientRef.current = client;
@@ -188,6 +195,7 @@ export function Chats({ route }) {
       client.deactivate();
       clientRef.current = null;
       setSocketReady(false);
+      setSocketError(null);
     };
   }, []);
 
@@ -220,10 +228,11 @@ export function Chats({ route }) {
     }
 
     if (!clientRef.current?.connected) {
-      setError("소켓 연결이 아직 준비되지 않았습니다.");
+      setSocketError("소켓 연결이 아직 준비되지 않았습니다.");
       return;
     }
 
+    setSocketError(null);
     setError(null);
     setInput("");
     sendChatRoomMessage(clientRef.current, selectedRoomId, content);
@@ -268,6 +277,7 @@ export function Chats({ route }) {
 
           {messagesLoading ? <Text style={styles.metaText}>메시지를 불러오는 중...</Text> : null}
           {error ? <Text style={styles.errorText}>{error}</Text> : null}
+          {socketError ? <Text style={styles.errorText}>{socketError}</Text> : null}
 
           <FlatList
             data={messages}
