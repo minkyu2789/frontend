@@ -9,6 +9,10 @@ import { fetchUsers } from "../../services/userService";
 
 const TAB_LIGHTNING = "LIGHTNING";
 const TAB_GROUP = "GROUP";
+const GROUP_SIZE_FILTER_ALL = "ALL";
+const GROUP_SIZE_FILTER_1 = "1";
+const GROUP_SIZE_FILTER_2 = "2";
+const GROUP_SIZE_FILTER_3PLUS = "3+";
 
 function toSexLabel(sex) {
   if (sex === "MALE") {
@@ -72,6 +76,7 @@ export function Nearby({ route }) {
   const [mingleRows, setMingleRows] = useState([]);
   const [usersById, setUsersById] = useState({});
   const [joinedMingleIdSet, setJoinedMingleIdSet] = useState(new Set());
+  const [groupSizeFilter, setGroupSizeFilter] = useState(GROUP_SIZE_FILTER_ALL);
 
   const cityId = Number(route?.params?.cityId);
   const currentUserId = useMemo(() => decodeUserIdFromToken(token), [token]);
@@ -96,6 +101,23 @@ export function Nearby({ route }) {
 
     return result;
   }, [mingleRows]);
+
+  const filteredGroupRows = useMemo(() => {
+    if (groupSizeFilter === GROUP_SIZE_FILTER_ALL) {
+      return mingleRows;
+    }
+
+    return mingleRows.filter((row) => {
+      const count = row?.minglers?.length ?? 0;
+      if (groupSizeFilter === GROUP_SIZE_FILTER_1) {
+        return count === 1;
+      }
+      if (groupSizeFilter === GROUP_SIZE_FILTER_2) {
+        return count === 2;
+      }
+      return count >= 3;
+    });
+  }, [groupSizeFilter, mingleRows]);
 
   const mingleMarkers = useMemo(() => {
     return mingleRows
@@ -228,13 +250,40 @@ export function Nearby({ route }) {
         </Pressable>
         <Pressable
           style={[styles.tabButton, activeTab === TAB_GROUP && styles.tabButtonActive]}
-          onPress={() => setActiveTab(TAB_GROUP)}
+          onPress={() => {
+            setActiveTab(TAB_GROUP);
+            setGroupSizeFilter(GROUP_SIZE_FILTER_ALL);
+          }}
         >
           <Text style={[styles.tabText, activeTab === TAB_GROUP && styles.tabTextActive]}>소모임</Text>
         </Pressable>
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
+        {activeTab === TAB_GROUP ? (
+          <View style={styles.groupFilterRow}>
+            {[
+              GROUP_SIZE_FILTER_ALL,
+              GROUP_SIZE_FILTER_1,
+              GROUP_SIZE_FILTER_2,
+              GROUP_SIZE_FILTER_3PLUS,
+            ].map((filter) => {
+              const active = groupSizeFilter === filter;
+              return (
+                <Pressable
+                  key={filter}
+                  style={[styles.groupFilterChip, active && styles.groupFilterChipActive]}
+                  onPress={() => setGroupSizeFilter(filter)}
+                >
+                  <Text style={[styles.groupFilterText, active && styles.groupFilterTextActive]}>
+                    {filter === GROUP_SIZE_FILTER_ALL ? "전체" : `${filter}인`}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        ) : null}
+
         {loading ? <Text style={styles.infoText}>불러오는 중...</Text> : null}
         {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
@@ -297,7 +346,7 @@ export function Nearby({ route }) {
                 {mingleMarkers.length === 0 ? <Text style={styles.mapEmpty}>표시 가능한 밍글 좌표가 없습니다.</Text> : null}
               </View>
 
-              {mingleRows.map((row) => {
+              {filteredGroupRows.map((row) => {
               const joined = joinedMingleIdSet.has(row?.mingle?.id);
               const minglerCount = row?.minglers?.length ?? 0;
 
@@ -325,7 +374,7 @@ export function Nearby({ route }) {
             </>
           ) : null}
 
-        {!loading && !error && ((activeTab === TAB_LIGHTNING && nearbyProfiles.length === 0) || (activeTab === TAB_GROUP && mingleRows.length === 0)) ? (
+        {!loading && !error && ((activeTab === TAB_LIGHTNING && nearbyProfiles.length === 0) || (activeTab === TAB_GROUP && filteredGroupRows.length === 0)) ? (
           <Text style={styles.infoText}>표시할 항목이 없습니다.</Text>
         ) : null}
       </ScrollView>
@@ -362,6 +411,32 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   tabTextActive: {
+    color: "#1C73F0",
+  },
+  groupFilterRow: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  groupFilterChip: {
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#D6DDEB",
+    backgroundColor: "#F7F9FD",
+    paddingHorizontal: 12,
+    height: 30,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  groupFilterChipActive: {
+    borderColor: "#1C73F0",
+    backgroundColor: "#EAF2FF",
+  },
+  groupFilterText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#4D5A76",
+  },
+  groupFilterTextActive: {
     color: "#1C73F0",
   },
   content: {
