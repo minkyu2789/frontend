@@ -164,7 +164,7 @@ function publishWithReceipt(client, destination, body) {
 }
 
 export function publishCreateQuickMatch(client, payload) {
-  debugLog("PUBLISH_CREATE", payload?.cityId, payload?.targetType);
+  debugLog("PUBLISH_CREATE", payload?.cityId);
   return publishWithReceipt(client, "/app/quick-matches", payload);
 }
 
