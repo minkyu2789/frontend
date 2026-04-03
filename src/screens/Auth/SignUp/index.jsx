@@ -179,15 +179,20 @@ export function SignUpScreen({ navigation }) {
     setVisibleKeywordCount((previous) => Math.min(previous + KEYWORD_PAGE_SIZE, keywords.length));
   }
 
-  async function handlePickProfileImage() {
+  async function pickProfileImage(source) {
     try {
-      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      const permission = source === "camera"
+        ? await ImagePicker.requestCameraPermissionsAsync()
+        : await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!permission.granted) {
-        setError("사진 접근 권한을 허용해주세요.");
+        setError(source === "camera" ? "카메라 권한을 허용해주세요." : "사진 접근 권한을 허용해주세요.");
         return;
       }
 
-      const picked = await ImagePicker.launchImageLibraryAsync({
+      const launch = source === "camera"
+        ? ImagePicker.launchCameraAsync
+        : ImagePicker.launchImageLibraryAsync;
+      const picked = await launch({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
         quality: 0.85,
@@ -208,6 +213,14 @@ export function SignUpScreen({ navigation }) {
     } catch {
       setError("프로필 사진 선택에 실패했습니다.");
     }
+  }
+
+  async function handlePickProfileImageFromGallery() {
+    await pickProfileImage("gallery");
+  }
+
+  async function handlePickProfileImageFromCamera() {
+    await pickProfileImage("camera");
   }
 
   function validateCurrentStep() {
@@ -468,9 +481,14 @@ export function SignUpScreen({ navigation }) {
                 <Text style={styles.profileImagePlaceholder}>사진</Text>
               )}
             </View>
-            <Pressable style={styles.profileImageButton} onPress={handlePickProfileImage}>
-              <Text style={styles.profileImageButtonText}>사진 선택</Text>
-            </Pressable>
+            <View style={styles.profileImageButtonGroup}>
+              <Pressable style={styles.profileImageButton} onPress={handlePickProfileImageFromGallery}>
+                <Text style={styles.profileImageButtonText}>갤러리</Text>
+              </Pressable>
+              <Pressable style={styles.profileImageButton} onPress={handlePickProfileImageFromCamera}>
+                <Text style={styles.profileImageButtonText}>카메라</Text>
+              </Pressable>
+            </View>
           </View>
 
           <Text style={styles.label}>닉네임</Text>
@@ -689,6 +707,9 @@ const styles = StyleSheet.create({
     color: "#4A5A78",
     fontSize: 13,
     fontWeight: "700",
+  },
+  profileImageButtonGroup: {
+    gap: 8,
   },
   sexRow: {
     flexDirection: "row",
