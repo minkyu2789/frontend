@@ -1,5 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { FlatList, Image, Pressable, StyleSheet, Text, View } from "react-native";
+import {
+  FlatList,
+  Image,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import { useAuth } from "../../auth";
@@ -45,46 +52,65 @@ export function Chats({ navigation, route }) {
   const [activeTab, setActiveTab] = useState(TAB_LOCAL);
   const handledAutoOpenRef = useRef(new Set());
 
-  const localRooms = useMemo(() => rooms.filter((room) => room?.directChat), [rooms]);
-  const travelerRooms = useMemo(() => rooms.filter((room) => !room?.directChat), [rooms]);
+  const localRooms = useMemo(
+    () => rooms.filter((room) => room?.directChat),
+    [rooms],
+  );
+  const travelerRooms = useMemo(
+    () => rooms.filter((room) => !room?.directChat),
+    [rooms],
+  );
   const visibleRooms = activeTab === TAB_LOCAL ? localRooms : travelerRooms;
 
-  const roomListLabel = useCallback((room) => {
-    if (room?.name) {
-      return room.name;
-    }
-
-    if (room?.directChat) {
-      const otherUserId = (room?.participantUserIds || []).find((participantId) => participantId !== userId);
-      if (otherUserId) {
-        return usersById[otherUserId]?.name || `USER #${otherUserId}`;
+  const roomListLabel = useCallback(
+    (room) => {
+      if (room?.name) {
+        return room.name;
       }
-    }
 
-    return `채팅방 #${room?.id}`;
-  }, [userId, usersById]);
+      if (room?.directChat) {
+        const otherUserId = (room?.participantUserIds || []).find(
+          (participantId) => participantId !== userId,
+        );
+        if (otherUserId) {
+          return usersById[otherUserId]?.name || `USER #${otherUserId}`;
+        }
+      }
 
-  const roomAvatarData = useCallback((room) => {
-    const participantIds = (room?.participantUserIds ?? []).filter((id) => Number(id) !== Number(userId));
-    if (participantIds.length > 1) {
-      return { type: "group" };
-    }
+      return `채팅방 #${room?.id}`;
+    },
+    [userId, usersById],
+  );
 
-    const otherUserId = participantIds[0];
-    const otherUser = otherUserId ? usersById[otherUserId] : null;
-    if (otherUser?.profileImageUrl) {
-      return { type: "image", imageUrl: otherUser.profileImageUrl };
-    }
+  const roomAvatarData = useCallback(
+    (room) => {
+      const participantIds = (room?.participantUserIds ?? []).filter(
+        (id) => Number(id) !== Number(userId),
+      );
+      if (participantIds.length > 1) {
+        return { type: "group" };
+      }
 
-    return { type: "fallback" };
-  }, [userId, usersById]);
+      const otherUserId = participantIds[0];
+      const otherUser = otherUserId ? usersById[otherUserId] : null;
+      if (otherUser?.profileImageUrl) {
+        return { type: "image", imageUrl: otherUser.profileImageUrl };
+      }
+
+      return { type: "fallback" };
+    },
+    [userId, usersById],
+  );
 
   const loadRooms = useCallback(async () => {
     setLoading(true);
     setError(null);
 
     try {
-      const [roomResponse, usersResponse] = await Promise.all([fetchChatRooms(), fetchUsers()]);
+      const [roomResponse, usersResponse] = await Promise.all([
+        fetchChatRooms(),
+        fetchUsers(),
+      ]);
       const loadedRooms = roomResponse?.chatRooms ?? [];
       const loadedUsers = usersResponse?.users ?? [];
       const userMap = loadedUsers.reduce((acc, user) => {
@@ -138,16 +164,36 @@ export function Chats({ navigation, route }) {
 
       <View style={styles.tabRow}>
         <Pressable
-          style={[styles.tabButton, activeTab === TAB_LOCAL && styles.tabButtonActive]}
+          style={[
+            styles.tabButton,
+            activeTab === TAB_LOCAL && styles.tabButtonActive,
+          ]}
           onPress={() => setActiveTab(TAB_LOCAL)}
         >
-          <Text style={[styles.tabText, activeTab === TAB_LOCAL && styles.tabTextActive]}>로컬 밍글러</Text>
+          <Text
+            style={[
+              styles.tabText,
+              activeTab === TAB_LOCAL && styles.tabTextActive,
+            ]}
+          >
+            로컬 밍글러
+          </Text>
         </Pressable>
         <Pressable
-          style={[styles.tabButton, activeTab === TAB_TRAVELER && styles.tabButtonActive]}
+          style={[
+            styles.tabButton,
+            activeTab === TAB_TRAVELER && styles.tabButtonActive,
+          ]}
           onPress={() => setActiveTab(TAB_TRAVELER)}
         >
-          <Text style={[styles.tabText, activeTab === TAB_TRAVELER && styles.tabTextActive]}>여행자 밍글러</Text>
+          <Text
+            style={[
+              styles.tabText,
+              activeTab === TAB_TRAVELER && styles.tabTextActive,
+            ]}
+          >
+            여행자 밍글러
+          </Text>
         </Pressable>
       </View>
 
@@ -165,11 +211,16 @@ export function Chats({ navigation, route }) {
           return (
             <Pressable
               style={styles.roomItem}
-              onPress={() => navigation.navigate("ChatRoom", { chatRoomId: item.id })}
+              onPress={() =>
+                navigation.navigate("ChatRoom", { chatRoomId: item.id })
+              }
             >
               <View style={styles.avatarCircle}>
                 {avatar.type === "image" ? (
-                  <Image source={{ uri: avatar.imageUrl }} style={styles.avatarImage} />
+                  <Image
+                    source={{ uri: avatar.imageUrl }}
+                    style={styles.avatarImage}
+                  />
                 ) : avatar.type === "group" ? (
                   <Ionicons name="people" size={18} color="#1D4ED8" />
                 ) : (
@@ -179,24 +230,36 @@ export function Chats({ navigation, route }) {
 
               <View style={styles.roomMain}>
                 <View style={styles.roomTopRow}>
-                  <Text style={styles.roomName} numberOfLines={1}>{title}</Text>
+                  <Text style={styles.roomName} numberOfLines={1}>
+                    {title}
+                  </Text>
                   <View style={styles.roomMetaWrap}>
-                    <Text style={styles.roomTime}>{formatRoomTime(item.updatedDateTime)}</Text>
+                    <Text style={styles.roomTime}>
+                      {formatRoomTime(item.updatedDateTime)}
+                    </Text>
                     {Number(item?.unreadMessageCount || 0) > 0 ? (
                       <View style={styles.unreadBadge}>
                         <Text style={styles.unreadBadgeText}>
-                          {Number(item.unreadMessageCount) > 99 ? "99+" : String(item.unreadMessageCount)}
+                          {Number(item.unreadMessageCount) > 99
+                            ? "99+"
+                            : String(item.unreadMessageCount)}
                         </Text>
                       </View>
                     ) : null}
                   </View>
                 </View>
-                <Text style={styles.roomSubtitle} numberOfLines={1}>{roomSubtitle(item)}</Text>
+                <Text style={styles.roomSubtitle} numberOfLines={1}>
+                  {roomSubtitle(item)}
+                </Text>
               </View>
             </Pressable>
           );
         }}
-        ListEmptyComponent={!loading ? <Text style={styles.metaText}>표시할 채팅방이 없습니다.</Text> : null}
+        ListEmptyComponent={
+          !loading ? (
+            <Text style={styles.metaText}>표시할 채팅방이 없습니다.</Text>
+          ) : null
+        }
       />
     </View>
   );
@@ -215,6 +278,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     marginBottom: 12,
+    borderBottomColor: "#b8b8b8",
+    borderBottomWidth: 0.5,
+    paddingBottom: 8,
   },
   headerTitle: {
     fontSize: 24,
@@ -233,19 +299,18 @@ const styles = StyleSheet.create({
   },
   tabRow: {
     flexDirection: "row",
-    backgroundColor: "#FFFFFF",
     borderRadius: 14,
     padding: 4,
     marginBottom: 12,
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
   },
   tabButton: {
-    flex: 1,
-    height: 38,
-    borderRadius: 11,
+    height: 32,
+    borderRadius: 16,
     alignItems: "center",
     justifyContent: "center",
+    marginRight: 10,
+    paddingHorizontal: 14,
+    backgroundColor: "white",
   },
   tabButtonActive: {
     backgroundColor: "#1D4ED8",
