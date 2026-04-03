@@ -164,7 +164,7 @@ export function ChatRoom({ navigation, route }) {
     }
 
     subscriptionRef.current?.unsubscribe();
-    subscriptionRef.current = subscribeChatRoom(clientRef.current, chatRoomId, (message) => {
+    subscriptionRef.current = subscribeChatRoom(clientRef.current, chatRoomId, userId, (message) => {
       setMessages((prev) => uniqueMessages([...prev, message]));
       if (message?.senderUserId && Number(message.senderUserId) !== Number(userId)) {
         markAsReadSilently();
@@ -234,7 +234,14 @@ export function ChatRoom({ navigation, route }) {
           return (
             <View style={[styles.messageRow, mine && styles.messageRowMine]}>
               <View style={[styles.bubble, mine ? styles.bubbleMine : styles.bubbleOther]}>
-                <Text style={[styles.messageText, mine && styles.messageTextMine]}>{item.content}</Text>
+                <Text style={[styles.messageText, mine && styles.messageTextMine]}>
+                  {item.translatedContent || item.content}
+                </Text>
+                {item.translatedContent && item.translatedContent !== item.content ? (
+                  <Text style={[styles.messageOriginalText, mine && styles.messageOriginalTextMine]}>
+                    {item.content}
+                  </Text>
+                ) : null}
                 <Text style={[styles.messageTime, mine && styles.messageTimeMine]}>{formatClock(item.createdDateTime)}</Text>
               </View>
             </View>
@@ -342,6 +349,14 @@ const styles = StyleSheet.create({
   },
   messageTextMine: {
     color: "#FFFFFF",
+  },
+  messageOriginalText: {
+    color: "#64748B",
+    fontSize: 12,
+    lineHeight: 17,
+  },
+  messageOriginalTextMine: {
+    color: "#DBEAFE",
   },
   messageTime: {
     color: "#64748B",
