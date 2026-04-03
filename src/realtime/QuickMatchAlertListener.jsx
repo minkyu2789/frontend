@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AppState, Pressable, StyleSheet, Text, View } from "react-native";
 import { useAuth } from "../auth";
 import { decodeUserIdFromToken } from "../auth/userId";
-import { fetchTrips } from "../services";
+import { fetchLocals, fetchTrips } from "../services";
 import {
   createQuickMatchSocketClient,
   subscribeCityQuickMatches,
@@ -35,12 +35,12 @@ export function QuickMatchAlertListener() {
   const { token } = useAuth();
   const userId = useMemo(() => toNumberOrNull(decodeUserIdFromToken(token)), [token]);
   const [socketReady, setSocketReady] = useState(false);
-  const [currentCityId, setCurrentCityId] = useState(null);
+  const [subscribedCityIds, setSubscribedCityIds] = useState([]);
   const [socketError, setSocketError] = useState(null);
   const [bannerMessage, setBannerMessage] = useState(null);
   const [bannerVisible, setBannerVisible] = useState(false);
   const clientRef = useRef(null);
-  const citySubscriptionRef = useRef(null);
+  const citySubscriptionRef = useRef(new Map());
   const userSubscriptionRef = useRef(null);
   const lastNotificationAtRef = useRef({});
   const bannerTimerRef = useRef(null);
@@ -87,19 +87,27 @@ export function QuickMatchAlertListener() {
     showInAppBanner(message);
   }, [socketError, showInAppBanner]);
 
-  const loadCurrentCityId = useCallback(async () => {
+  const loadSubscribedCityIds = useCallback(async () => {
     if (!userId) {
-      setCurrentCityId(null);
+      setSubscribedCityIds([]);
       return;
     }
 
     try {
-      const tripsResponse = await fetchTrips();
+      const [tripsResponse, localsResponse] = await Promise.all([
+        fetchTrips(),
+        fetchLocals(),
+      ]);
       const userTrips = (tripsResponse?.trips ?? []).filter((trip) => toNumberOrNull(trip?.userId) === userId);
       const trip = pickCurrentTrip(userTrips);
-      setCurrentCityId(toNumberOrNull(trip?.cityId));
+      const tripCityId = toNumberOrNull(trip?.cityId);
+      const localCityIds = (localsResponse?.locals ?? [])
+        .map((local) => toNumberOrNull(local?.city?.id))
+        .filter(Boolean);
+      const merged = Array.from(new Set([tripCityId, ...localCityIds].filter(Boolean))).sort((a, b) => a - b);
+      setSubscribedCityIds(merged);
     } catch {
-      setCurrentCityId(null);
+      setSubscribedCityIds([]);
     }
   }, [userId]);
 
@@ -125,8 +133,8 @@ export function QuickMatchAlertListener() {
     client.activate();
 
     return () => {
-      citySubscriptionRef.current?.unsubscribe();
-      citySubscriptionRef.current = null;
+      citySubscriptionRef.current.forEach((subscription) => subscription?.unsubscribe());
+      citySubscriptionRef.current.clear();
       userSubscriptionRef.current?.unsubscribe();
       userSubscriptionRef.current = null;
       client.deactivate();
@@ -140,12 +148,12 @@ export function QuickMatchAlertListener() {
   }, [userId]);
 
   useEffect(() => {
-    loadCurrentCityId();
+    loadSubscribedCityIds();
 
-    const intervalId = setInterval(loadCurrentCityId, 60000);
+    const intervalId = setInterval(loadSubscribedCityIds, 60000);
     const appStateSubscription = AppState.addEventListener("change", (nextState) => {
       if (nextState === "active") {
-        loadCurrentCityId();
+        loadSubscribedCityIds();
       }
     });
 
@@ -153,7 +161,7 @@ export function QuickMatchAlertListener() {
       clearInterval(intervalId);
       appStateSubscription.remove();
     };
-  }, [loadCurrentCityId]);
+  }, [loadSubscribedCityIds]);
 
   useEffect(() => {
     if (!socketReady || !clientRef.current || !userId) {
@@ -176,28 +184,35 @@ export function QuickMatchAlertListener() {
   }, [socketReady, userId, shouldNotify, showInAppBanner]);
 
   useEffect(() => {
-    if (!socketReady || !clientRef.current || !userId || !currentCityId) {
+    if (!socketReady || !clientRef.current || !userId || subscribedCityIds.length === 0) {
       return;
     }
 
-    console.log("[QM SOCKET] SUBSCRIBE CITY", currentCityId);
-    citySubscriptionRef.current?.unsubscribe();
-    citySubscriptionRef.current = subscribeCityQuickMatches(clientRef.current, currentCityId, (event) => {
-      console.log("[QM SOCKET] CITY EVENT", event?.eventType || "-", event?.quickMatch?.id || "-");
-      const targetUserIds = event?.targetUserIds ?? [];
-      const isTargetUser = targetUserIds.length === 0 || targetUserIds.some((id) => toNumberOrNull(id) === userId);
-      if (!isTargetUser || !shouldNotify(event)) {
-        return;
-      }
+    citySubscriptionRef.current.forEach((subscription) => subscription?.unsubscribe());
+    citySubscriptionRef.current.clear();
 
-      showInAppBanner(getEventMessage(event?.eventType));
+    subscribedCityIds.forEach((cityId) => {
+      console.log("[QM SOCKET] SUBSCRIBE CITY", cityId);
+      const subscription = subscribeCityQuickMatches(clientRef.current, cityId, (event) => {
+        console.log("[QM SOCKET] CITY EVENT", event?.eventType || "-", event?.quickMatch?.id || "-");
+        const targetUserIds = event?.targetUserIds ?? [];
+        const isTargetUser = targetUserIds.length === 0 || targetUserIds.some((id) => toNumberOrNull(id) === userId);
+        if (!isTargetUser || !shouldNotify(event)) {
+          return;
+        }
+
+        showInAppBanner(getEventMessage(event?.eventType));
+      });
+      if (subscription) {
+        citySubscriptionRef.current.set(cityId, subscription);
+      }
     });
 
     return () => {
-      citySubscriptionRef.current?.unsubscribe();
-      citySubscriptionRef.current = null;
+      citySubscriptionRef.current.forEach((subscription) => subscription?.unsubscribe());
+      citySubscriptionRef.current.clear();
     };
-  }, [socketReady, userId, currentCityId, shouldNotify, showInAppBanner]);
+  }, [socketReady, userId, subscribedCityIds, shouldNotify, showInAppBanner]);
 
   if (!bannerVisible || !bannerMessage) {
     return null;
