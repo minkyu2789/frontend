@@ -133,11 +133,36 @@ export function MyPage({ navigation }) {
     }, [loadMyPage]),
   );
 
+  function openTripEditor(tripId) {
+    const safeTripId = Number(tripId || 0);
+    if (safeTripId <= 0) {
+      return;
+    }
+
+    const parentNavigation = navigation.getParent?.();
+    if (parentNavigation?.navigate) {
+      parentNavigation.navigate("CreateTrip", { tripId: safeTripId });
+      return;
+    }
+
+    navigation.navigate("CreateTrip", { tripId: safeTripId });
+  }
+
+  function openCreateTrip() {
+    const parentNavigation = navigation.getParent?.();
+    if (parentNavigation?.navigate) {
+      parentNavigation.navigate("CreateTrip");
+      return;
+    }
+
+    navigation.navigate("CreateTrip");
+  }
+
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
       <View style={styles.blueTop}>
         <View style={styles.topBar}>
-          <Pressable style={styles.iconButton} onPress={() => navigation.navigate("CreateTrip")}>
+          <Pressable style={styles.iconButton} onPress={openCreateTrip}>
             <Ionicons name="ellipsis-vertical" size={20} color="#FFFFFF" />
           </Pressable>
         </View>
@@ -171,7 +196,7 @@ export function MyPage({ navigation }) {
 
         <View style={styles.sectionTitleRow}>
           <Text style={styles.sectionTitle}>여행 기록</Text>
-          <Pressable style={styles.iconButton} onPress={() => navigation.navigate("CreateTrip")}>
+          <Pressable style={styles.iconButton} onPress={openCreateTrip}>
             <Ionicons name="add" size={20} color="#1C73F0" />
           </Pressable>
         </View>
@@ -180,17 +205,28 @@ export function MyPage({ navigation }) {
         <View style={styles.tripList}>
           {displayTrips.map((trip) => {
             const tripCity = citiesById[trip?.cityId] || null;
+            const safeTripId = Number(trip?.id || 0);
             return (
-              <View key={trip.id} style={styles.tripCard}>
+              <Pressable
+                key={trip.id}
+                style={styles.tripCard}
+                onPress={() => openTripEditor(safeTripId)}
+                disabled={safeTripId <= 0}
+              >
                 <View style={styles.tripHead}>
                   <TravelIcon />
-                  <Pressable onPress={() => navigation.navigate("CreateTrip", { tripId: trip.id })}>
-                    <DirectionBlack />
+                  <Pressable
+                    style={styles.tripArrowButton}
+                    hitSlop={12}
+                    onPress={() => openTripEditor(safeTripId)}
+                    disabled={safeTripId <= 0}
+                  >
+                    <Ionicons name="chevron-forward" size={18} color="#111111" />
                   </Pressable>
                 </View>
                 <Text style={styles.tripTitle}>{getCityNameKo(tripCity)}</Text>
                 <Text style={styles.tripMeta}>{getTripMetaText(trip)}</Text>
-              </View>
+              </Pressable>
             );
           })}
           {displayTrips.length === 0 ? <Text style={styles.emptyText}>아직 생성된 여행이 없습니다.</Text> : null}
@@ -323,6 +359,14 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     marginBottom: 10,
+    alignItems: "center",
+  },
+  tripArrowButton: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: "center",
+    justifyContent: "center",
   },
   tripTitle: {
     fontSize: 18,
