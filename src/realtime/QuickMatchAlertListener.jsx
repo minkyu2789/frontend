@@ -4,9 +4,11 @@ import { useAuth } from "../auth";
 import { decodeUserIdFromToken } from "../auth/userId";
 import { fetchLocals, fetchTrips } from "../services";
 import { navigationRef } from "../navigation/navigationRef";
-import { acceptQuickMatch, declineQuickMatch } from "../services/quickMatchService";
+import { joinMingleChatRoom } from "../services/chatService";
 import {
   createQuickMatchSocketClient,
+  publishAcceptQuickMatch,
+  publishDeclineQuickMatch,
   subscribeCityQuickMatches,
   subscribeUserQuickMatches,
 } from "../services/quickMatchSocketService";
@@ -43,10 +45,12 @@ export function QuickMatchAlertListener() {
   const [bannerVisible, setBannerVisible] = useState(false);
   const [incomingQuickMatch, setIncomingQuickMatch] = useState(null);
   const [incomingActionLoading, setIncomingActionLoading] = useState(false);
+  const [pendingAcceptedQuickMatchId, setPendingAcceptedQuickMatchId] = useState(null);
   const clientRef = useRef(null);
   const citySubscriptionRef = useRef(new Map());
   const userSubscriptionRef = useRef(null);
   const lastNotificationAtRef = useRef({});
+  const handledAcceptedQuickMatchesRef = useRef(new Set());
   const bannerTimerRef = useRef(null);
 
   const shouldNotify = useCallback((event) => {
@@ -95,20 +99,13 @@ export function QuickMatchAlertListener() {
 
     setIncomingActionLoading(true);
     try {
-      const response = await acceptQuickMatch(quickMatchId);
-      setIncomingQuickMatch(null);
-      showInAppBanner("빠른 매칭이 수락되어 채팅이 열렸어요.");
-      const chatRoomId = toNumberOrNull(response?.result?.chatRoom?.id);
-      if (chatRoomId && navigationRef.isReady()) {
-        navigationRef.navigate("Tabs", {
-          screen: "Chats",
-          params: { chatRoomId },
-        });
-      } else if (navigationRef.isReady()) {
-        navigationRef.navigate("Tabs", {
-          screen: "Chats",
-        });
+      if (!clientRef.current?.connected) {
+        throw new Error("소켓 연결이 준비되지 않았습니다.");
       }
+      await publishAcceptQuickMatch(clientRef.current, quickMatchId);
+      setPendingAcceptedQuickMatchId(quickMatchId);
+      setIncomingQuickMatch(null);
+      showInAppBanner("빠른 매칭 수락 요청을 보냈어요.");
     } catch (error) {
       showInAppBanner(error?.message || "빠른 매칭 수락에 실패했습니다.");
     } finally {
@@ -124,7 +121,10 @@ export function QuickMatchAlertListener() {
 
     setIncomingActionLoading(true);
     try {
-      await declineQuickMatch(quickMatchId);
+      if (!clientRef.current?.connected) {
+        throw new Error("소켓 연결이 준비되지 않았습니다.");
+      }
+      await publishDeclineQuickMatch(clientRef.current, quickMatchId);
       setIncomingQuickMatch(null);
       showInAppBanner("빠른 매칭을 거절했어요.");
     } catch (error) {
@@ -227,7 +227,48 @@ export function QuickMatchAlertListener() {
     }
 
     userSubscriptionRef.current?.unsubscribe();
-    userSubscriptionRef.current = subscribeUserQuickMatches(clientRef.current, userId, (event) => {
+    userSubscriptionRef.current = subscribeUserQuickMatches(clientRef.current, userId, async (event) => {
+      if (event?.eventType === "QUICK_MATCH_ERROR") {
+        if (pendingAcceptedQuickMatchId && event?.action === "QUICK_MATCH_ACCEPT") {
+          setPendingAcceptedQuickMatchId(null);
+        }
+        showInAppBanner(event?.reason || "빠른 매칭 처리 중 오류가 발생했습니다.");
+        return;
+      }
+
+      if (event?.eventType === "QUICK_MATCH_ACCEPTED") {
+        const quickMatchId = toNumberOrNull(event?.quickMatch?.id);
+        const acceptedMingleId = toNumberOrNull(event?.quickMatch?.mingleId);
+        const alreadyHandled = quickMatchId ? handledAcceptedQuickMatchesRef.current.has(quickMatchId) : false;
+        if (quickMatchId && acceptedMingleId && !alreadyHandled) {
+          handledAcceptedQuickMatchesRef.current.add(quickMatchId);
+          try {
+            const joined = await joinMingleChatRoom(acceptedMingleId);
+            const chatRoomId = toNumberOrNull(joined?.chatRoom?.id);
+            if (chatRoomId && navigationRef.isReady()) {
+              navigationRef.navigate("Tabs", {
+                screen: "Chats",
+                params: { chatRoomId },
+              });
+            } else if (navigationRef.isReady()) {
+              navigationRef.navigate("Tabs", {
+                screen: "Chats",
+              });
+            }
+          } catch {
+            if (navigationRef.isReady()) {
+              navigationRef.navigate("Tabs", {
+                screen: "Chats",
+              });
+            }
+          } finally {
+            if (pendingAcceptedQuickMatchId && quickMatchId === pendingAcceptedQuickMatchId) {
+              setPendingAcceptedQuickMatchId(null);
+            }
+          }
+        }
+      }
+
       if (!shouldNotify(event)) {
         return;
       }
@@ -239,7 +280,7 @@ export function QuickMatchAlertListener() {
       userSubscriptionRef.current?.unsubscribe();
       userSubscriptionRef.current = null;
     };
-  }, [socketReady, userId, shouldNotify, showInAppBanner]);
+  }, [pendingAcceptedQuickMatchId, socketReady, userId, shouldNotify, showInAppBanner]);
 
   useEffect(() => {
     if (!socketReady || !clientRef.current || !userId || subscribedCityIds.length === 0) {
@@ -253,17 +294,17 @@ export function QuickMatchAlertListener() {
       console.log("[QM SOCKET] SUBSCRIBE CITY", cityId);
       const subscription = subscribeCityQuickMatches(clientRef.current, cityId, (event) => {
         console.log("[QM SOCKET] CITY EVENT", event?.eventType || "-", event?.quickMatch?.id || "-");
-      const targetUserIds = event?.targetUserIds ?? [];
-      const isTargetUser = targetUserIds.length === 0 || targetUserIds.some((id) => toNumberOrNull(id) === userId);
-      if (!isTargetUser || !shouldNotify(event)) {
-        return;
-      }
+        const targetUserIds = event?.targetUserIds ?? [];
+        const isTargetUser = targetUserIds.length === 0 || targetUserIds.some((id) => toNumberOrNull(id) === userId);
+        if (!isTargetUser || !shouldNotify(event)) {
+          return;
+        }
 
-      if (event?.eventType === "QUICK_MATCH_CREATED") {
-        setIncomingQuickMatch(event);
-      }
-      showInAppBanner(getEventMessage(event?.eventType));
-    });
+        if (event?.eventType === "QUICK_MATCH_CREATED") {
+          setIncomingQuickMatch(event);
+        }
+        showInAppBanner(getEventMessage(event?.eventType));
+      });
       if (subscription) {
         citySubscriptionRef.current.set(cityId, subscription);
       }
