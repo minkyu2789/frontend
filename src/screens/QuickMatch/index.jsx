@@ -12,23 +12,34 @@ const OPTION_ITEMS = [
 export function QuickMatch({ navigation, route }) {
   const [selected, setSelected] = useState("MINGLERS");
   const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState(null);
   const cityId = useMemo(() => Number(route?.params?.cityId || 1), [route?.params?.cityId]);
 
   async function handleConfirm() {
     if (!Number.isFinite(cityId) || cityId <= 0) {
+      setError("유효한 도시 정보가 없어 빠른 매칭을 생성할 수 없습니다.");
       navigation.goBack();
       return;
     }
 
     setSubmitting(true);
+    setError(null);
     try {
       await createQuickMatch({
         cityId,
         targetType: selected,
       });
+      navigation.goBack();
+    } catch (requestError) {
+      const message = requestError?.message || "빠른 매칭 생성에 실패했습니다.";
+      setError(message);
+      console.warn("[QM CREATE] FAILED", {
+        cityId,
+        targetType: selected,
+        message,
+      });
     } finally {
       setSubmitting(false);
-      navigation.goBack();
     }
   }
 
@@ -54,6 +65,8 @@ export function QuickMatch({ navigation, route }) {
             );
           })}
         </View>
+
+        {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
         <Pressable style={[styles.confirmBtn, submitting && styles.confirmBtnDisabled]} onPress={handleConfirm} disabled={submitting}>
           <Text style={styles.confirmText}>{submitting ? "확인 중..." : "확인"}</Text>
@@ -145,5 +158,10 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 34 / 2,
     fontWeight: "700",
+  },
+  errorText: {
+    color: "#C62828",
+    fontSize: 12,
+    lineHeight: 16,
   },
 });
