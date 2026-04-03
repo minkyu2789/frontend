@@ -1,10 +1,29 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { FlatList, Image, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import {
+  FlatList,
+  Image,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../../auth";
 import { decodeUserIdFromToken } from "../../auth/userId";
-import { fetchChatMessages, fetchChatRoom, fetchUsers, markChatRoomAsRead } from "../../services";
-import { createChatSocketClient, sendChatRoomMessage, subscribeChatRoom } from "../../services/chatSocketService";
+import {
+  fetchChatMessages,
+  fetchChatRoom,
+  fetchUsers,
+  markChatRoomAsRead,
+} from "../../services";
+import {
+  createChatSocketClient,
+  sendChatRoomMessage,
+  subscribeChatRoom,
+} from "../../services/chatSocketService";
 
 const PENDING_TIMEOUT_MS = 20000;
 
@@ -27,8 +46,15 @@ function formatClock(value) {
 function uniqueMessages(messages) {
   return [...messages]
     .filter((message) => message?.id)
-    .sort((a, b) => String(a.createdDateTime || "").localeCompare(String(b.createdDateTime || "")))
-    .filter((message, index, array) => array.findIndex((item) => item.id === message.id) === index);
+    .sort((a, b) =>
+      String(a.createdDateTime || "").localeCompare(
+        String(b.createdDateTime || ""),
+      ),
+    )
+    .filter(
+      (message, index, array) =>
+        array.findIndex((item) => item.id === message.id) === index,
+    );
 }
 
 export function ChatRoom({ navigation, route }) {
@@ -52,7 +78,9 @@ export function ChatRoom({ navigation, route }) {
 
   const renderedMessages = useMemo(() => {
     return [...messages, ...pendingMessages].sort((a, b) => {
-      return String(a.createdDateTime || "").localeCompare(String(b.createdDateTime || ""));
+      return String(a.createdDateTime || "").localeCompare(
+        String(b.createdDateTime || ""),
+      );
     });
   }, [messages, pendingMessages]);
 
@@ -91,7 +119,9 @@ export function ChatRoom({ navigation, route }) {
     }
 
     if (chatRoom.directChat) {
-      const otherUserId = (chatRoom.participantUserIds || []).find((participantId) => participantId !== userId);
+      const otherUserId = (chatRoom.participantUserIds || []).find(
+        (participantId) => participantId !== userId,
+      );
       if (otherUserId) {
         return usersById[otherUserId]?.name || `USER #${otherUserId}`;
       }
@@ -101,12 +131,15 @@ export function ChatRoom({ navigation, route }) {
   }, [chatRoom, userId, usersById]);
 
   const headerAvatar = useMemo(() => {
-    const participantIds = (chatRoom?.participantUserIds ?? []).filter((id) => Number(id) !== Number(userId));
+    const participantIds = (chatRoom?.participantUserIds ?? []).filter(
+      (id) => Number(id) !== Number(userId),
+    );
     if (participantIds.length > 1) {
       return { type: "group" };
     }
 
-    const otherUser = participantIds.length === 1 ? usersById[participantIds[0]] : null;
+    const otherUser =
+      participantIds.length === 1 ? usersById[participantIds[0]] : null;
     if (otherUser?.profileImageUrl) {
       return { type: "image", imageUrl: otherUser.profileImageUrl };
     }
@@ -130,11 +163,12 @@ export function ChatRoom({ navigation, route }) {
     setError(null);
 
     try {
-      const [chatRoomResponse, chatMessagesResponse, usersResponse] = await Promise.all([
-        fetchChatRoom(chatRoomId),
-        fetchChatMessages(chatRoomId),
-        fetchUsers(),
-      ]);
+      const [chatRoomResponse, chatMessagesResponse, usersResponse] =
+        await Promise.all([
+          fetchChatRoom(chatRoomId),
+          fetchChatMessages(chatRoomId),
+          fetchUsers(),
+        ]);
 
       const loadedUsers = usersResponse?.users ?? [];
       const userMap = loadedUsers.reduce((acc, user) => {
@@ -206,28 +240,37 @@ export function ChatRoom({ navigation, route }) {
     }
 
     subscriptionRef.current?.unsubscribe();
-    subscriptionRef.current = subscribeChatRoom(clientRef.current, chatRoomId, userId, (message) => {
-      setMessages((prev) => uniqueMessages([...prev, message]));
-      if (Number(message?.senderUserId) === Number(userId)) {
-        setPendingMessages((previous) => {
-          const next = [...previous];
-          const matchedIndex = next.findIndex(
-            (pending) =>
-              pending.status !== "failed" &&
-              String(pending.content || "").trim() === String(message?.content || "").trim(),
-          );
-          if (matchedIndex >= 0) {
-            const matched = next[matchedIndex];
-            clearPendingTimeout(matched.localId);
-            next.splice(matchedIndex, 1);
-          }
-          return next;
-        });
-      }
-      if (message?.senderUserId && Number(message.senderUserId) !== Number(userId)) {
-        markAsReadSilently();
-      }
-    });
+    subscriptionRef.current = subscribeChatRoom(
+      clientRef.current,
+      chatRoomId,
+      userId,
+      (message) => {
+        setMessages((prev) => uniqueMessages([...prev, message]));
+        if (Number(message?.senderUserId) === Number(userId)) {
+          setPendingMessages((previous) => {
+            const next = [...previous];
+            const matchedIndex = next.findIndex(
+              (pending) =>
+                pending.status !== "failed" &&
+                String(pending.content || "").trim() ===
+                  String(message?.content || "").trim(),
+            );
+            if (matchedIndex >= 0) {
+              const matched = next[matchedIndex];
+              clearPendingTimeout(matched.localId);
+              next.splice(matchedIndex, 1);
+            }
+            return next;
+          });
+        }
+        if (
+          message?.senderUserId &&
+          Number(message.senderUserId) !== Number(userId)
+        ) {
+          markAsReadSilently();
+        }
+      },
+    );
 
     return () => {
       subscriptionRef.current?.unsubscribe();
@@ -322,11 +365,15 @@ export function ChatRoom({ navigation, route }) {
     }
 
     clearPendingTimeout(localId);
-    setPendingMessages((previous) => previous.filter((item) => item.localId !== localId));
+    setPendingMessages((previous) =>
+      previous.filter((item) => item.localId !== localId),
+    );
     sendMessageContent(target.content);
   }
 
-  const hasPendingTranslation = pendingMessages.some((item) => item.status === "pending");
+  const hasPendingTranslation = pendingMessages.some(
+    (item) => item.status === "pending",
+  );
 
   return (
     <KeyboardAvoidingView
@@ -335,25 +382,40 @@ export function ChatRoom({ navigation, route }) {
       keyboardVerticalOffset={Platform.OS === "ios" ? 18 : 0}
     >
       <View style={styles.header}>
-        <Pressable style={styles.backButton} onPress={() => navigation.goBack()}>
+        <Pressable
+          style={styles.backButton}
+          onPress={() => navigation.goBack()}
+        >
           <Ionicons name="chevron-back" size={22} color="#111827" />
         </Pressable>
         <View style={styles.headerAvatarCircle}>
           {headerAvatar.type === "image" ? (
-            <Image source={{ uri: headerAvatar.imageUrl }} style={styles.headerAvatarImage} />
+            <Image
+              source={{ uri: headerAvatar.imageUrl }}
+              style={styles.headerAvatarImage}
+            />
           ) : headerAvatar.type === "group" ? (
             <Ionicons name="people" size={17} color="#1D4ED8" />
           ) : (
             <Ionicons name="person" size={17} color="#1D4ED8" />
           )}
         </View>
-        <Text style={styles.headerTitle} numberOfLines={1}>{roomTitle}</Text>
-        <Text style={[styles.socketState, socketReady ? styles.socketReady : styles.socketPending]}>
+        <Text style={styles.headerTitle} numberOfLines={1}>
+          {roomTitle}
+        </Text>
+        <Text
+          style={[
+            styles.socketState,
+            socketReady ? styles.socketReady : styles.socketPending,
+          ]}
+        >
           {socketReady ? "LIVE" : "OFFLINE"}
         </Text>
       </View>
 
-      {loading ? <Text style={styles.metaText}>메시지를 불러오는 중...</Text> : null}
+      {loading ? (
+        <Text style={styles.metaText}>메시지를 불러오는 중...</Text>
+      ) : null}
       {error ? <Text style={styles.errorText}>{error}</Text> : null}
       {socketError ? <Text style={styles.errorText}>{socketError}</Text> : null}
 
@@ -370,33 +432,61 @@ export function ChatRoom({ navigation, route }) {
           const isFailed = item.status === "failed";
           return (
             <View style={[styles.messageRow, mine && styles.messageRowMine]}>
-              <View style={[styles.bubble, mine ? styles.bubbleMine : styles.bubbleOther]}>
-                <Text style={[styles.messageText, mine && styles.messageTextMine]}>
+              <View
+                style={[
+                  styles.bubble,
+                  mine ? styles.bubbleMine : styles.bubbleOther,
+                ]}
+              >
+                <Text
+                  style={[styles.messageText, mine && styles.messageTextMine]}
+                >
                   {item.translatedContent || item.content}
                 </Text>
-                {item.translatedContent && item.translatedContent !== item.content ? (
-                  <Text style={[styles.messageOriginalText, mine && styles.messageOriginalTextMine]}>
+                {item.translatedContent &&
+                item.translatedContent !== item.content ? (
+                  <Text
+                    style={[
+                      styles.messageOriginalText,
+                      mine && styles.messageOriginalTextMine,
+                    ]}
+                  >
                     {item.content}
                   </Text>
                 ) : null}
                 {mine && isPending ? (
                   <View style={styles.pendingRow}>
-                    <Text style={[styles.pendingText, isFailed && styles.pendingTextFailed]}>
+                    <Text
+                      style={[
+                        styles.pendingText,
+                        isFailed && styles.pendingTextFailed,
+                      ]}
+                    >
                       {isFailed ? "전송 실패" : "번역 및 전송 중..."}
                     </Text>
                     {isFailed ? (
-                      <Pressable onPress={() => handleRetryPending(item.localId)}>
+                      <Pressable
+                        onPress={() => handleRetryPending(item.localId)}
+                      >
                         <Text style={styles.pendingRetryText}>재시도</Text>
                       </Pressable>
                     ) : null}
                   </View>
                 ) : null}
-                <Text style={[styles.messageTime, mine && styles.messageTimeMine]}>{formatClock(item.createdDateTime)}</Text>
+                <Text
+                  style={[styles.messageTime, mine && styles.messageTimeMine]}
+                >
+                  {formatClock(item.createdDateTime)}
+                </Text>
               </View>
             </View>
           );
         }}
-        ListEmptyComponent={!loading ? <Text style={styles.metaText}>메시지가 없습니다.</Text> : null}
+        ListEmptyComponent={
+          !loading ? (
+            <Text style={styles.metaText}>메시지가 없습니다.</Text>
+          ) : null
+        }
       />
 
       <View style={styles.inputRow}>
@@ -410,12 +500,21 @@ export function ChatRoom({ navigation, route }) {
           returnKeyType="send"
           onSubmitEditing={handleSend}
         />
-        <Pressable style={[styles.sendButton, !input.trim() && styles.sendButtonDisabled]} onPress={handleSend} disabled={!input.trim()}>
+        <Pressable
+          style={[
+            styles.sendButton,
+            !input.trim() && styles.sendButtonDisabled,
+          ]}
+          onPress={handleSend}
+          disabled={!input.trim()}
+        >
           <Ionicons name="send" size={18} color="#FFFFFF" />
         </Pressable>
       </View>
       {hasPendingTranslation ? (
-        <Text style={styles.sendingHintText}>메시지를 번역 중입니다. 잠시만 기다려주세요.</Text>
+        <Text style={styles.sendingHintText}>
+          메시지를 번역 중입니다. 잠시만 기다려주세요.
+        </Text>
       ) : null}
     </KeyboardAvoidingView>
   );
@@ -557,6 +656,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 8,
     marginTop: 6,
+    marginBottom: 30,
   },
   input: {
     flex: 1,
