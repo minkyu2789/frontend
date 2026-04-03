@@ -9,7 +9,14 @@ function normalizeLiteral(value) {
 }
 
 function getNationalityDisplayName(nationality) {
-  return nationality?.countryNameKorean || nationality?.countryNameEnglish || "";
+  const english = String(nationality?.countryNameEnglish || "").trim();
+  const korean = String(nationality?.countryNameKorean || "").trim();
+
+  if (english && korean) {
+    return `${english} (${korean})`;
+  }
+
+  return english || korean;
 }
 
 function getNationalitySearchText(nationality) {
