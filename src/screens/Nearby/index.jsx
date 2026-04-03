@@ -11,7 +11,8 @@ import { fetchGooglePlaceDetails, searchGooglePlaces } from "../../services/goog
 const GROUP_SIZE_FILTER_ALL = "ALL";
 const GROUP_SIZE_FILTER_1 = "1";
 const GROUP_SIZE_FILTER_2 = "2";
-const GROUP_SIZE_FILTER_3PLUS = "3+";
+const GROUP_SIZE_FILTER_2PLUS = "2+";
+const TARGET_PARTICIPANT_OPTIONS = [1, 2, 3, 4];
 
 function toRelativeTimeLabel(isoString) {
   if (!isoString) {
@@ -80,6 +81,7 @@ export function Nearby({ route }) {
     latitude: null,
     longitude: null,
     meetDateTime: "",
+    targetParticipantCount: 2,
   });
   const [placeQuery, setPlaceQuery] = useState("");
   const [placeSuggestions, setPlaceSuggestions] = useState([]);
@@ -111,14 +113,17 @@ export function Nearby({ route }) {
     }
 
     return mingleRows.filter((row) => {
-      const count = row?.minglers?.length ?? 0;
+      const targetCount = Number(row?.mingle?.targetParticipantCount);
+      const count = Number.isFinite(targetCount) && targetCount > 0
+        ? targetCount
+        : (row?.minglers?.length ?? 0);
       if (groupSizeFilter === GROUP_SIZE_FILTER_1) {
         return count === 1;
       }
       if (groupSizeFilter === GROUP_SIZE_FILTER_2) {
         return count === 2;
       }
-      return count >= 3;
+      return count >= 2;
     });
   }, [groupSizeFilter, mingleRows]);
 
@@ -256,6 +261,7 @@ export function Nearby({ route }) {
       latitude: null,
       longitude: null,
       meetDateTime: "",
+      targetParticipantCount: 2,
     });
     setPlaceQuery("");
     setPlaceSuggestions([]);
@@ -369,6 +375,7 @@ export function Nearby({ route }) {
         meetDateTime: String(createForm.meetDateTime || "").trim() || null,
         latitude: placeName ? createForm.latitude : null,
         longitude: placeName ? createForm.longitude : null,
+        targetParticipantCount: Number(createForm.targetParticipantCount) || null,
       });
       setCreateModalVisible(false);
       resetCreateForm();
@@ -401,7 +408,7 @@ export function Nearby({ route }) {
               GROUP_SIZE_FILTER_ALL,
               GROUP_SIZE_FILTER_1,
               GROUP_SIZE_FILTER_2,
-              GROUP_SIZE_FILTER_3PLUS,
+              GROUP_SIZE_FILTER_2PLUS,
             ].map((filter) => {
               const active = groupSizeFilter === filter;
               return (
@@ -450,6 +457,8 @@ export function Nearby({ route }) {
               const selected = Number(selectedMingleId) === Number(row?.mingle?.id);
               const meetAtText = row?.mingle?.meetDateTime ? toRelativeTimeLabel(row?.mingle?.meetDateTime) : "시간 미정";
               const placeNameText = row?.mingle?.placeName || "장소 미정";
+              const targetCount = Number(row?.mingle?.targetParticipantCount);
+              const wantedCount = Number.isFinite(targetCount) && targetCount > 0 ? targetCount : null;
 
               return (
                 <Pressable
@@ -465,6 +474,7 @@ export function Nearby({ route }) {
                     </Text>
                     <Text style={styles.placeText}>📍 {placeNameText}</Text>
                     <Text style={styles.meetText}>🕒 {meetAtText}</Text>
+                    {wantedCount ? <Text style={styles.countText}>원하는 인원 {wantedCount}명</Text> : null}
                     <Text style={styles.countText}>참여 중 {minglerCount}명</Text>
                   </View>
                   <Pressable
@@ -565,6 +575,26 @@ export function Nearby({ route }) {
               onChangeText={(value) => setCreateForm((prev) => ({ ...prev, meetDateTime: value }))}
               placeholder="언제 만날까요? 예: 2026-04-05T19:30:00 (선택)"
             />
+            <View style={styles.targetCountWrap}>
+              <Text style={styles.targetCountLabel}>원하는 인원</Text>
+              <View style={styles.targetCountRow}>
+                {TARGET_PARTICIPANT_OPTIONS.map((count) => {
+                  const selected = Number(createForm.targetParticipantCount) === count;
+                  const label = count === 4 ? "4+" : `${count}`;
+                  return (
+                    <Pressable
+                      key={count}
+                      style={[styles.targetCountChip, selected && styles.targetCountChipActive]}
+                      onPress={() => setCreateForm((prev) => ({ ...prev, targetParticipantCount: count }))}
+                    >
+                      <Text style={[styles.targetCountChipText, selected && styles.targetCountChipTextActive]}>
+                        {label}명
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </View>
             <TextInput
               style={[styles.formInput, styles.formInputMultiline]}
               value={createForm.description}
@@ -870,6 +900,42 @@ const styles = StyleSheet.create({
   placeErrorText: {
     color: "#C62828",
     fontSize: 12,
+  },
+  targetCountWrap: {
+    gap: 8,
+    marginTop: 2,
+  },
+  targetCountLabel: {
+    color: "#111827",
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  targetCountRow: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  targetCountChip: {
+    minWidth: 56,
+    height: 34,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#CBD5E1",
+    backgroundColor: "#F8FAFC",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 10,
+  },
+  targetCountChipActive: {
+    borderColor: "#1C73F0",
+    backgroundColor: "#EAF2FF",
+  },
+  targetCountChipText: {
+    color: "#475569",
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  targetCountChipTextActive: {
+    color: "#1C73F0",
   },
   formInputMultiline: {
     minHeight: 90,
