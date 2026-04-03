@@ -19,7 +19,8 @@ const INTEREST_ITEMS = [
 const MIN_PROGRESS_VISIBLE_MS = 1200;
 
 function formatElapsed(seconds) {
-  const safe = Number.isFinite(seconds) && seconds >= 0 ? Math.floor(seconds) : 0;
+  const safe =
+    Number.isFinite(seconds) && seconds >= 0 ? Math.floor(seconds) : 0;
   const minutes = String(Math.floor(safe / 60)).padStart(2, "0");
   const remainSeconds = String(safe % 60).padStart(2, "0");
   return `${minutes}:${remainSeconds}`;
@@ -38,7 +39,10 @@ async function waitForSocketConnected(client, timeoutMs = 5000) {
 
 export function QuickMatch({ navigation, route }) {
   const { token } = useAuth();
-  const userId = useMemo(() => Number(decodeUserIdFromToken(token) || 0), [token]);
+  const userId = useMemo(
+    () => Number(decodeUserIdFromToken(token) || 0),
+    [token],
+  );
   const [selectedInterestKeys, setSelectedInterestKeys] = useState(["ANY"]);
   const [submitting, setSubmitting] = useState(false);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
@@ -53,10 +57,14 @@ export function QuickMatch({ navigation, route }) {
   });
   const clientRef = useRef(null);
   const userSubscriptionRef = useRef(null);
-  const cityId = useMemo(() => Number(route?.params?.cityId || 1), [route?.params?.cityId]);
+  const cityId = useMemo(
+    () => Number(route?.params?.cityId || 1),
+    [route?.params?.cityId],
+  );
   const selectedInterestsLabel = useMemo(() => {
-    return INTEREST_ITEMS
-      .filter((item) => selectedInterestKeys.includes(item.key))
+    return INTEREST_ITEMS.filter((item) =>
+      selectedInterestKeys.includes(item.key),
+    )
       .map((item) => item.label)
       .join(" ");
   }, [selectedInterestKeys]);
@@ -102,58 +110,70 @@ export function QuickMatch({ navigation, route }) {
     }
 
     userSubscriptionRef.current?.unsubscribe();
-    userSubscriptionRef.current = subscribeUserQuickMatches(clientRef.current, userId, (event) => {
-      if (!mountedRef.current) {
-        return;
-      }
-
-      const pending = pendingRequestRef.current;
-      const match = event?.quickMatch;
-      const quickMatchId = Number(match?.id || 0);
-      const isPendingQuickMatch =
-        (pending.quickMatchId && quickMatchId === pending.quickMatchId) ||
-        (Number(match?.cityId) === pending.cityId &&
-          Number(match?.requesterUserId) === userId);
-
-      if (event?.eventType === "QUICK_MATCH_CREATED") {
-        const isRequester = Number(match?.requesterUserId) === userId;
-        if (isRequester && submitting && isPendingQuickMatch) {
-          pendingRequestRef.current = {
-            ...pending,
-            quickMatchId,
-          };
+    userSubscriptionRef.current = subscribeUserQuickMatches(
+      clientRef.current,
+      userId,
+      (event) => {
+        if (!mountedRef.current) {
+          return;
         }
-      }
 
-      if (event?.eventType === "QUICK_MATCH_ACCEPTED" && submitting && isPendingQuickMatch) {
-        setSubmitting(false);
-        pendingRequestRef.current = {
-          cityId: null,
-          quickMatchId: null,
-        };
-        navigation.goBack();
-        return;
-      }
+        const pending = pendingRequestRef.current;
+        const match = event?.quickMatch;
+        const quickMatchId = Number(match?.id || 0);
+        const isPendingQuickMatch =
+          (pending.quickMatchId && quickMatchId === pending.quickMatchId) ||
+          (Number(match?.cityId) === pending.cityId &&
+            Number(match?.requesterUserId) === userId);
 
-      if (event?.eventType === "QUICK_MATCH_DECLINED" && submitting && isPendingQuickMatch) {
-        setSubmitting(false);
-        pendingRequestRef.current = {
-          cityId: null,
-          quickMatchId: null,
-        };
-        setError("빠른 매칭이 거절되었어요. 다시 시도해 주세요.");
-        return;
-      }
+        if (event?.eventType === "QUICK_MATCH_CREATED") {
+          const isRequester = Number(match?.requesterUserId) === userId;
+          if (isRequester && submitting && isPendingQuickMatch) {
+            pendingRequestRef.current = {
+              ...pending,
+              quickMatchId,
+            };
+          }
+        }
 
-      if (event?.eventType === "QUICK_MATCH_ERROR" && submitting) {
-        setSubmitting(false);
-        pendingRequestRef.current = {
-          cityId: null,
-          quickMatchId: null,
-        };
-        setError(event?.reason || "빠른 매칭 요청 처리에 실패했습니다.");
-      }
-    });
+        if (
+          event?.eventType === "QUICK_MATCH_ACCEPTED" &&
+          submitting &&
+          isPendingQuickMatch
+        ) {
+          setSubmitting(false);
+          pendingRequestRef.current = {
+            cityId: null,
+            quickMatchId: null,
+          };
+          navigation.goBack();
+          return;
+        }
+
+        if (
+          event?.eventType === "QUICK_MATCH_DECLINED" &&
+          submitting &&
+          isPendingQuickMatch
+        ) {
+          setSubmitting(false);
+          pendingRequestRef.current = {
+            cityId: null,
+            quickMatchId: null,
+          };
+          setError("빠른 매칭이 거절되었어요. 다시 시도해 주세요.");
+          return;
+        }
+
+        if (event?.eventType === "QUICK_MATCH_ERROR" && submitting) {
+          setSubmitting(false);
+          pendingRequestRef.current = {
+            cityId: null,
+            quickMatchId: null,
+          };
+          setError(event?.reason || "빠른 매칭 요청 처리에 실패했습니다.");
+        }
+      },
+    );
 
     return () => {
       userSubscriptionRef.current?.unsubscribe();
@@ -189,7 +209,9 @@ export function QuickMatch({ navigation, route }) {
         return;
       }
 
-      const nextElapsed = Math.floor((Date.now() - startedAtRef.current) / 1000);
+      const nextElapsed = Math.floor(
+        (Date.now() - startedAtRef.current) / 1000,
+      );
       setElapsedSeconds(nextElapsed);
     }, 1000);
 
@@ -223,15 +245,21 @@ export function QuickMatch({ navigation, route }) {
     try {
       const connected = await waitForSocketConnected(clientRef.current, 5000);
       if (!connected) {
-        throw new Error("실시간 연결 준비 중입니다. 잠시 후 다시 시도해주세요.");
+        throw new Error(
+          "실시간 연결 준비 중입니다. 잠시 후 다시 시도해주세요.",
+        );
       }
       await publishCreateQuickMatch(clientRef.current, {
         cityId,
-        message: selectedInterestKeys.includes("ANY") ? null : selectedInterestsLabel,
+        message: selectedInterestKeys.includes("ANY")
+          ? null
+          : selectedInterestsLabel,
       });
       const elapsedMs = Date.now() - requestStartedAt;
       if (elapsedMs < MIN_PROGRESS_VISIBLE_MS) {
-        await new Promise((resolve) => setTimeout(resolve, MIN_PROGRESS_VISIBLE_MS - elapsedMs));
+        await new Promise((resolve) =>
+          setTimeout(resolve, MIN_PROGRESS_VISIBLE_MS - elapsedMs),
+        );
       }
       if (!mountedRef.current) {
         return;
@@ -273,7 +301,6 @@ export function QuickMatch({ navigation, route }) {
   return (
     <View style={styles.overlay}>
       <View style={styles.modal}>
-        <View style={styles.topHandle} />
         <View style={styles.headerRow}>
           <Text style={styles.title}>빠른 매칭을 시작할게요!</Text>
           <Pressable onPress={() => navigation.goBack()}>
@@ -282,17 +309,29 @@ export function QuickMatch({ navigation, route }) {
         </View>
 
         <>
-          <Text style={styles.sectionDescription}>여행자와 무엇을 함께 하고 싶나요?</Text>
+          <Text style={styles.sectionDescription}>
+            여행자와 무엇을 함께 하고 싶나요?
+          </Text>
           <View style={styles.interestWrap}>
             {INTEREST_ITEMS.map((item) => {
               const active = selectedInterestKeys.includes(item.key);
               return (
                 <Pressable
                   key={item.key}
-                  style={[styles.interestChip, active && styles.interestChipActive]}
+                  style={[
+                    styles.interestChip,
+                    active && styles.interestChipActive,
+                  ]}
                   onPress={() => handleSelectInterest(item.key)}
                 >
-                  <Text style={[styles.interestChipText, active && styles.interestChipTextActive]}>{item.label}</Text>
+                  <Text
+                    style={[
+                      styles.interestChipText,
+                      active && styles.interestChipTextActive,
+                    ]}
+                  >
+                    {item.label}
+                  </Text>
                 </Pressable>
               );
             })}
@@ -300,29 +339,49 @@ export function QuickMatch({ navigation, route }) {
         </>
 
         {error ? <Text style={styles.errorText}>{error}</Text> : null}
-        {!socketReady ? <Text style={styles.metaText}>실시간 연결 중...</Text> : null}
+        {!socketReady ? (
+          <Text style={styles.metaText}>실시간 연결 중...</Text>
+        ) : null}
 
         <Pressable
-          style={[styles.confirmBtn, (submitting || !socketReady) && styles.confirmBtnDisabled]}
+          style={[
+            styles.confirmBtn,
+            (submitting || !socketReady) && styles.confirmBtnDisabled,
+          ]}
           onPress={handleConfirm}
           disabled={submitting || !socketReady}
         >
-          <Text style={styles.confirmText}>{submitting ? "확인 중..." : "확인"}</Text>
+          <Text style={styles.confirmText}>
+            {submitting ? "확인 중..." : "확인"}
+          </Text>
         </Pressable>
       </View>
 
       {submitting ? (
         <View style={styles.progressOverlay}>
           <View style={styles.progressCard}>
-            <Pressable style={styles.progressCloseButton} onPress={() => navigation.goBack()}>
+            <Pressable
+              style={styles.progressCloseButton}
+              onPress={() => navigation.goBack()}
+            >
               <Ionicons name="close" size={18} color="#334155" />
             </Pressable>
             <Text style={styles.progressTitle}>빠른 매칭 요청 중</Text>
-            <Text style={styles.progressTarget}>현재 지역 전체에게 요청 중</Text>
-            {selectedInterestsLabel ? <Text style={styles.progressInterest}>{selectedInterestsLabel}</Text> : null}
-            <Text style={styles.progressDescription}>요청이 완료될 때까지 잠시만 기다려 주세요.</Text>
+            <Text style={styles.progressTarget}>
+              현재 지역 전체에게 요청 중
+            </Text>
+            {selectedInterestsLabel ? (
+              <Text style={styles.progressInterest}>
+                {selectedInterestsLabel}
+              </Text>
+            ) : null}
+            <Text style={styles.progressDescription}>
+              요청이 완료될 때까지 잠시만 기다려 주세요.
+            </Text>
             <Text style={styles.progressElapsedLabel}>경과 시간</Text>
-            <Text style={styles.progressElapsedValue}>{formatElapsed(elapsedSeconds)}</Text>
+            <Text style={styles.progressElapsedValue}>
+              {formatElapsed(elapsedSeconds)}
+            </Text>
           </View>
         </View>
       ) : null}
@@ -345,13 +404,6 @@ const styles = StyleSheet.create({
     paddingBottom: 16,
     gap: 12,
   },
-  topHandle: {
-    alignSelf: "center",
-    width: 36,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: "#D9D9D9",
-  },
   headerRow: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -362,7 +414,7 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#111",
     flex: 1,
-    marginRight: 10,
+    marginRight: 5,
   },
   sectionDescription: {
     color: "#374151",
@@ -377,14 +429,13 @@ const styles = StyleSheet.create({
   interestChip: {
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: "#D6DFEF",
+    borderColor: "#0169FE",
     paddingHorizontal: 12,
     paddingVertical: 8,
-    backgroundColor: "#F4F7FD",
   },
   interestChipActive: {
-    borderColor: "#1C73F0",
-    backgroundColor: "#EAF2FF",
+    borderColor: "#0169FE",
+    backgroundColor: "#0169FE",
   },
   interestChipText: {
     color: "#45536F",
@@ -392,7 +443,7 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   interestChipTextActive: {
-    color: "#165FC6",
+    color: "#F4F7FD",
   },
   confirmBtn: {
     marginTop: 6,
