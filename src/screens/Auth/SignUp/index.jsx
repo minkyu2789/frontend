@@ -271,7 +271,7 @@ export function SignUpScreen({ navigation }) {
   }
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
+    <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
       <View style={styles.headerRow}>
         <Pressable onPress={handleBackStep}>
           <Text style={styles.backText}>이전</Text>
