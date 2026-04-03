@@ -44,8 +44,8 @@ import { pickCurrentTrip } from "../../utils/trip";
 const CHIPS = [
   { id: "restaurant", labelKo: "#식당", labelEn: "#Food", supported: true },
   { id: "cafe", labelKo: "#카페", labelEn: "#Cafe", supported: true },
-  { id: "shopping", labelKo: "#쇼핑", labelEn: "#Shopping", supported: false },
-  { id: "fun", labelKo: "#놀거리", labelEn: "#Activities", supported: false },
+  { id: "shopping", labelKo: "#쇼핑", labelEn: "#Shopping", supported: true },
+  { id: "fun", labelKo: "#놀거리", labelEn: "#Activities", supported: true },
 ];
 const HOME_MODE_TRAVELER = "TRAVELER";
 const HOME_MODE_LOCAL = "LOCAL";
@@ -62,7 +62,6 @@ function ChipRow({ activeId, onSelect, tx }) {
         return (
           <Pressable
             key={chip.id}
-            disabled={!chip.supported}
             onPress={() => onSelect(chip.id)}
             style={[
               styles.chip,
@@ -118,6 +117,8 @@ function resolveCityCenter(city, placesByType) {
   const candidatePlaces = [
     ...(placesByType?.restaurant ?? []),
     ...(placesByType?.cafe ?? []),
+    ...(placesByType?.shopping ?? []),
+    ...(placesByType?.fun ?? []),
   ];
   const placeWithCoordinate = candidatePlaces.find((place) => {
     const latitude = toCoordinateValue(place?.latitude ?? place?.lat);
@@ -162,6 +163,8 @@ export function MainScreen() {
   const [placesByType, setPlacesByType] = useState({
     restaurant: [],
     cafe: [],
+    shopping: [],
+    fun: [],
   });
   const [placeLoading, setPlaceLoading] = useState(false);
   const [placeError, setPlaceError] = useState(null);
@@ -174,17 +177,11 @@ export function MainScreen() {
   const placeRequestSequenceRef = useRef(0);
 
   const userId = useMemo(() => decodeUserIdFromToken(token), [token]);
-  const activePlaceType = useMemo(() => {
-    if (activeChip === "restaurant") {
-      return "restaurant";
-    }
 
-    if (activeChip === "cafe") {
-      return "cafe";
-    }
+  const isRestaurantTab = activeChip === "restaurant";
+  const isCafeLikeTab =
+    activeChip === "cafe" || activeChip === "shopping" || activeChip === "fun";
 
-    return null;
-  }, [activeChip]);
   const selectedCity = useMemo(() => {
     if (homeMode === HOME_MODE_LOCAL) {
       return localCity || tripCity || null;
@@ -224,15 +221,15 @@ export function MainScreen() {
     );
   }
 
-  async function loadPlacesForType(cityId, placeType) {
-    if (!cityId || !placeType) {
+  async function loadPlacesForType(cityId, chipId) {
+    if (!cityId || !chipId) {
       setPlaces([]);
       setPlaceLoading(false);
       setPlaceError(null);
       return;
     }
 
-    const cachedPlaces = placesByType[placeType] ?? [];
+    const cachedPlaces = placesByType[chipId] ?? [];
     setPlaces(cachedPlaces);
     setPlaceLoading(true);
     setPlaceError(null);
@@ -240,25 +237,25 @@ export function MainScreen() {
     const requestSequence = ++placeRequestSequenceRef.current;
 
     try {
-      if (placeType === "cafe") {
-        const cafeResponse = await fetchCafesByCity(cityId);
-        const cafes = cafeResponse?.cafes ?? [];
-        const enriched = await enrichWithImages(cafes, "cafe");
+      if (chipId === "restaurant") {
+        const restaurantResponse = await fetchRestaurantsByCity(cityId);
+        const restaurants = restaurantResponse?.restaurants ?? [];
+        const enriched = await enrichWithImages(restaurants, "restaurant");
         if (requestSequence !== placeRequestSequenceRef.current) {
           return;
         }
-        setPlacesByType((prev) => ({ ...prev, cafe: enriched }));
+        setPlacesByType((prev) => ({ ...prev, restaurant: enriched }));
         setPlaces(enriched);
         return;
       }
 
-      const restaurantResponse = await fetchRestaurantsByCity(cityId);
-      const restaurants = restaurantResponse?.restaurants ?? [];
-      const enriched = await enrichWithImages(restaurants, "restaurant");
+      const cafeResponse = await fetchCafesByCity(cityId);
+      const cafes = cafeResponse?.cafes ?? [];
+      const enriched = await enrichWithImages(cafes, "cafe");
       if (requestSequence !== placeRequestSequenceRef.current) {
         return;
       }
-      setPlacesByType((prev) => ({ ...prev, restaurant: enriched }));
+      setPlacesByType((prev) => ({ ...prev, [chipId]: enriched }));
       setPlaces(enriched);
     } catch {
       if (requestSequence !== placeRequestSequenceRef.current) {
@@ -327,7 +324,7 @@ export function MainScreen() {
       setCurrentTrip(trip);
       setTripCity(nextTripCity);
       setLocalCity(nextLocalCity);
-      setPlacesByType({ restaurant: [], cafe: [] });
+      setPlacesByType({ restaurant: [], cafe: [], shopping: [], fun: [] });
       setPlaces([]);
       setPlaceError(null);
       setPlaceLoading(false);
@@ -342,7 +339,7 @@ export function MainScreen() {
       setTripCity(null);
       setLocalCity(null);
       setPlaces([]);
-      setPlacesByType({ restaurant: [], cafe: [] });
+      setPlacesByType({ restaurant: [], cafe: [], shopping: [], fun: [] });
       setPlaceLoading(false);
       setPlaceError(null);
       setLocalMingleRows([]);
@@ -364,8 +361,8 @@ export function MainScreen() {
     if (homeMode !== HOME_MODE_TRAVELER) {
       return;
     }
-    loadPlacesForType(selectedCity?.id, activePlaceType);
-  }, [homeMode, selectedCity?.id, activePlaceType, homeDataVersion]);
+    loadPlacesForType(selectedCity?.id, activeChip);
+  }, [homeMode, selectedCity?.id, activeChip, homeDataVersion]);
 
   useEffect(() => {
     if (homeMode !== HOME_MODE_LOCAL) {
@@ -413,7 +410,7 @@ export function MainScreen() {
   }, [homeMode, selectedCity?.id, homeDataVersion, tx]);
 
   async function handleSave(placeId) {
-    if (activePlaceType === "cafe") {
+    if (isCafeLikeTab) {
       const savedCafeId = savedCafeByPlaceId[placeId];
       if (savedCafeId) {
         await deleteSavedCafe(savedCafeId);
@@ -499,6 +496,8 @@ export function MainScreen() {
     };
   }, [localMarkers]);
 
+  const showTrendingStates = homeMode === HOME_MODE_TRAVELER;
+
   return (
     <View style={styles.mainContainer}>
       <ScrollView contentContainerStyle={styles.container}>
@@ -554,7 +553,7 @@ export function MainScreen() {
             </Text>
           </View>
           <View style={styles.locationRow}>
-          <Text style={styles.locationKo}>
+            <Text style={styles.locationKo}>
               {selectedCityDisplayName || tx("어디로 떠나시나요?", "Where to next?")}
             </Text>
             <Position width={18} height={18} />
@@ -589,7 +588,7 @@ export function MainScreen() {
                   style={StyleSheet.absoluteFill}
                 />
                 <View style={styles.quickCardHeader}>
-                <Text style={styles.nearbyTitle}>{tx("근처 밍글러", "Nearby Minglers")}</Text>
+                  <Text style={styles.nearbyTitle}>{tx("근처 밍글러", "Nearby Minglers")}</Text>
                   <Direction width={18} height={18} />
                 </View>
                 <Text style={styles.nearbyBody}>
@@ -679,7 +678,7 @@ export function MainScreen() {
                   >
                     <Ionicons
                       name={
-                        activePlaceType === "cafe"
+                        isCafeLikeTab
                           ? savedCafeByPlaceId[place.id]
                             ? "bookmark"
                             : "bookmark-outline"
@@ -713,25 +712,21 @@ export function MainScreen() {
                 </ImageBackground>
               </Pressable>
             ))}
-            {activePlaceType == null ? (
-              <Text style={styles.emptyText}>
-                {tx("해당 태그는 아직 준비 중입니다.", "This tag is coming soon.")}
-              </Text>
-            ) : null}
-            {activePlaceType != null && placeLoading ? (
+
+            {showTrendingStates && placeLoading ? (
               <View style={styles.pendingWrap}>
                 <ActivityIndicator size="small" color="#1C73F0" />
                 <Text style={styles.pendingText}>
-                  {activePlaceType === "cafe"
-                    ? tx("카페를 불러오는 중...", "Loading cafes...")
-                    : tx("식당을 불러오는 중...", "Loading restaurants...")}
+                  {isRestaurantTab
+                    ? tx("식당을 불러오는 중...", "Loading restaurants...")
+                    : tx("카페를 불러오는 중...", "Loading cafes...")}
                 </Text>
               </View>
             ) : null}
-            {activePlaceType != null && !placeLoading && placeError ? (
+            {showTrendingStates && !placeLoading && placeError ? (
               <Text style={styles.emptyText}>{placeError}</Text>
             ) : null}
-            {activePlaceType != null &&
+            {showTrendingStates &&
             !placeLoading &&
             !placeError &&
             visiblePlaces.length === 0 ? (
