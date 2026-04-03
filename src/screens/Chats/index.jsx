@@ -53,6 +53,7 @@ export function Chats({ route }) {
   const userId = useMemo(() => decodeUserIdFromToken(token), [token]);
   const clientRef = useRef(null);
   const subscriptionRef = useRef(null);
+  const messageListRef = useRef(null);
   const [rooms, setRooms] = useState([]);
   const [usersById, setUsersById] = useState({});
   const [selectedRoomId, setSelectedRoomId] = useState(null);
@@ -87,6 +88,12 @@ export function Chats({ route }) {
 
     return `그룹 채팅 ${selectedRoom.id}`;
   }, [selectedRoom, userId, usersById]);
+
+  const scrollToBottom = useCallback((animated = true) => {
+    requestAnimationFrame(() => {
+      messageListRef.current?.scrollToEnd({ animated });
+    });
+  }, []);
 
   function roomListLabel(room) {
     if (room.name) {
@@ -162,6 +169,14 @@ export function Chats({ route }) {
   useEffect(() => {
     loadMessages(selectedRoomId);
   }, [selectedRoomId, loadMessages]);
+
+  useEffect(() => {
+    if (!selectedRoomId || messages.length === 0) {
+      return;
+    }
+
+    scrollToBottom();
+  }, [messages, scrollToBottom, selectedRoomId]);
 
   useEffect(() => {
     const requestedChatRoomId = Number(route?.params?.chatRoomId);
@@ -280,10 +295,12 @@ export function Chats({ route }) {
           {socketError ? <Text style={styles.errorText}>{socketError}</Text> : null}
 
           <FlatList
+            ref={messageListRef}
             data={messages}
             keyExtractor={(item) => String(item.id)}
             style={styles.messageList}
             contentContainerStyle={styles.messageContent}
+            onContentSizeChange={() => scrollToBottom(false)}
             renderItem={({ item }) => {
               const mine = item.senderUserId === userId;
               return (
