@@ -10,8 +10,8 @@ import {
 } from "../../services/quickMatchSocketService";
 
 const OPTION_ITEMS = [
-  { key: "MINGLERS", title: "현지 밍글러", subtitle: "맛집 탐방" },
-  { key: "LOCALS", title: "여행자 밍글러", subtitle: "여행지 공유" },
+  { key: "LOCALS", title: "로컬 밍글러", subtitle: "여행 가이드" },
+  { key: "MINGLERS", title: "여행자 밍글러", subtitle: "여행 동반자" },
   { key: "ANY", title: "무관", subtitle: "상관없어요" },
 ];
 const INTEREST_ITEMS = [
