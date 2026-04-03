@@ -3,6 +3,8 @@ import { AppState, Pressable, StyleSheet, Text, View } from "react-native";
 import { useAuth } from "../auth";
 import { decodeUserIdFromToken } from "../auth/userId";
 import { fetchLocals, fetchTrips } from "../services";
+import { navigationRef } from "../navigation/navigationRef";
+import { acceptQuickMatch, declineQuickMatch } from "../services/quickMatchService";
 import {
   createQuickMatchSocketClient,
   subscribeCityQuickMatches,
@@ -39,6 +41,8 @@ export function QuickMatchAlertListener() {
   const [socketError, setSocketError] = useState(null);
   const [bannerMessage, setBannerMessage] = useState(null);
   const [bannerVisible, setBannerVisible] = useState(false);
+  const [incomingQuickMatch, setIncomingQuickMatch] = useState(null);
+  const [incomingActionLoading, setIncomingActionLoading] = useState(false);
   const clientRef = useRef(null);
   const citySubscriptionRef = useRef(new Map());
   const userSubscriptionRef = useRef(null);
@@ -75,6 +79,60 @@ export function QuickMatchAlertListener() {
       setBannerMessage(null);
     }, 4200);
   }, []);
+
+  const dismissIncomingQuickMatch = useCallback(() => {
+    if (incomingActionLoading) {
+      return;
+    }
+    setIncomingQuickMatch(null);
+  }, [incomingActionLoading]);
+
+  const handleAcceptIncomingQuickMatch = useCallback(async () => {
+    const quickMatchId = toNumberOrNull(incomingQuickMatch?.quickMatch?.id);
+    if (!quickMatchId || incomingActionLoading) {
+      return;
+    }
+
+    setIncomingActionLoading(true);
+    try {
+      const response = await acceptQuickMatch(quickMatchId);
+      setIncomingQuickMatch(null);
+      showInAppBanner("빠른 매칭이 수락되어 채팅이 열렸어요.");
+      const chatRoomId = toNumberOrNull(response?.result?.chatRoom?.id);
+      if (chatRoomId && navigationRef.isReady()) {
+        navigationRef.navigate("Tabs", {
+          screen: "Chats",
+          params: { chatRoomId },
+        });
+      } else if (navigationRef.isReady()) {
+        navigationRef.navigate("Tabs", {
+          screen: "Chats",
+        });
+      }
+    } catch (error) {
+      showInAppBanner(error?.message || "빠른 매칭 수락에 실패했습니다.");
+    } finally {
+      setIncomingActionLoading(false);
+    }
+  }, [incomingActionLoading, incomingQuickMatch?.quickMatch?.id, showInAppBanner]);
+
+  const handleDeclineIncomingQuickMatch = useCallback(async () => {
+    const quickMatchId = toNumberOrNull(incomingQuickMatch?.quickMatch?.id);
+    if (!quickMatchId || incomingActionLoading) {
+      return;
+    }
+
+    setIncomingActionLoading(true);
+    try {
+      await declineQuickMatch(quickMatchId);
+      setIncomingQuickMatch(null);
+      showInAppBanner("빠른 매칭을 거절했어요.");
+    } catch (error) {
+      showInAppBanner(error?.message || "빠른 매칭 거절에 실패했습니다.");
+    } finally {
+      setIncomingActionLoading(false);
+    }
+  }, [incomingActionLoading, incomingQuickMatch?.quickMatch?.id, showInAppBanner]);
 
   useEffect(() => {
     if (!socketError) {
@@ -195,14 +253,17 @@ export function QuickMatchAlertListener() {
       console.log("[QM SOCKET] SUBSCRIBE CITY", cityId);
       const subscription = subscribeCityQuickMatches(clientRef.current, cityId, (event) => {
         console.log("[QM SOCKET] CITY EVENT", event?.eventType || "-", event?.quickMatch?.id || "-");
-        const targetUserIds = event?.targetUserIds ?? [];
-        const isTargetUser = targetUserIds.length === 0 || targetUserIds.some((id) => toNumberOrNull(id) === userId);
-        if (!isTargetUser || !shouldNotify(event)) {
-          return;
-        }
+      const targetUserIds = event?.targetUserIds ?? [];
+      const isTargetUser = targetUserIds.length === 0 || targetUserIds.some((id) => toNumberOrNull(id) === userId);
+      if (!isTargetUser || !shouldNotify(event)) {
+        return;
+      }
 
-        showInAppBanner(getEventMessage(event?.eventType));
-      });
+      if (event?.eventType === "QUICK_MATCH_CREATED") {
+        setIncomingQuickMatch(event);
+      }
+      showInAppBanner(getEventMessage(event?.eventType));
+    });
       if (subscription) {
         citySubscriptionRef.current.set(cityId, subscription);
       }
@@ -214,17 +275,54 @@ export function QuickMatchAlertListener() {
     };
   }, [socketReady, userId, subscribedCityIds, shouldNotify, showInAppBanner]);
 
-  if (!bannerVisible || !bannerMessage) {
+  const hasBanner = bannerVisible && bannerMessage;
+  const hasIncomingQuickMatch = Boolean(incomingQuickMatch?.quickMatch?.id);
+
+  if (!hasBanner && !hasIncomingQuickMatch) {
     return null;
   }
 
   return (
-    <View pointerEvents="box-none" style={styles.overlay}>
-      <Pressable style={styles.banner} onPress={() => setBannerVisible(false)}>
-        <Text style={styles.bannerTitle}>빠른 매칭 알림</Text>
-        <Text style={styles.bannerBody}>{bannerMessage}</Text>
-      </Pressable>
-    </View>
+    <>
+      {hasBanner ? (
+        <View pointerEvents="box-none" style={styles.overlay}>
+          <Pressable style={styles.banner} onPress={() => setBannerVisible(false)}>
+            <Text style={styles.bannerTitle}>빠른 매칭 알림</Text>
+            <Text style={styles.bannerBody}>{bannerMessage}</Text>
+          </Pressable>
+        </View>
+      ) : null}
+
+      {hasIncomingQuickMatch ? (
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <Pressable style={styles.modalCloseButton} onPress={dismissIncomingQuickMatch} disabled={incomingActionLoading}>
+              <Text style={styles.modalCloseText}>×</Text>
+            </Pressable>
+            <Text style={styles.modalTitle}>빠른 매칭 요청이 도착했어요</Text>
+            <Text style={styles.modalDescription}>
+              {incomingQuickMatch?.quickMatch?.message || "지금 함께할 밍글러를 찾고 있어요."}
+            </Text>
+            <View style={styles.modalActionRow}>
+              <Pressable
+                style={[styles.modalActionButton, styles.modalDeclineButton, incomingActionLoading && styles.modalActionButtonDisabled]}
+                onPress={handleDeclineIncomingQuickMatch}
+                disabled={incomingActionLoading}
+              >
+                <Text style={styles.modalDeclineText}>{incomingActionLoading ? "처리 중..." : "거절"}</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.modalActionButton, styles.modalAcceptButton, incomingActionLoading && styles.modalActionButtonDisabled]}
+                onPress={handleAcceptIncomingQuickMatch}
+                disabled={incomingActionLoading}
+              >
+                <Text style={styles.modalAcceptText}>{incomingActionLoading ? "처리 중..." : "수락하고 채팅 시작"}</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      ) : null}
+    </>
   );
 }
 
@@ -259,5 +357,89 @@ const styles = StyleSheet.create({
     color: "#E5E7EB",
     fontSize: 12,
     lineHeight: 17,
+  },
+  modalOverlay: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
+    zIndex: 10000,
+    backgroundColor: "rgba(15,23,42,0.45)",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 18,
+  },
+  modalCard: {
+    width: "100%",
+    borderRadius: 16,
+    backgroundColor: "#FFFFFF",
+    paddingTop: 18,
+    paddingBottom: 16,
+    paddingHorizontal: 14,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+  },
+  modalCloseButton: {
+    position: "absolute",
+    right: 10,
+    top: 10,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: "#F1F5F9",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  modalCloseText: {
+    fontSize: 18,
+    lineHeight: 18,
+    color: "#334155",
+    fontWeight: "600",
+  },
+  modalTitle: {
+    color: "#0F172A",
+    fontSize: 16,
+    fontWeight: "700",
+    marginTop: 4,
+    marginBottom: 8,
+  },
+  modalDescription: {
+    color: "#475569",
+    fontSize: 13,
+    lineHeight: 19,
+    marginBottom: 14,
+  },
+  modalActionRow: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  modalActionButton: {
+    flex: 1,
+    height: 42,
+    borderRadius: 11,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  modalActionButtonDisabled: {
+    opacity: 0.7,
+  },
+  modalDeclineButton: {
+    borderWidth: 1,
+    borderColor: "#CBD5E1",
+    backgroundColor: "#FFFFFF",
+  },
+  modalAcceptButton: {
+    backgroundColor: "#1D4ED8",
+  },
+  modalDeclineText: {
+    color: "#475569",
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  modalAcceptText: {
+    color: "#FFFFFF",
+    fontSize: 13,
+    fontWeight: "700",
   },
 });
