@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import * as ImagePicker from "expo-image-picker";
 import { SearchDropdown } from "../../components/SearchDropdown";
 import { useAuth } from "../../auth";
 import { decodeUserIdFromToken } from "../../auth/userId";
-import { fetchNationalities, fetchUser, updateUser } from "../../services";
+import { fetchNationalities, fetchUser, updateUser, uploadUserProfileImage } from "../../services";
 
 function normalizeLiteral(value) {
   return String(value || "").trim().toLowerCase();
@@ -30,6 +31,7 @@ export function ProfileEdit({ navigation }) {
     phone: "",
     sex: "",
     introduction: "",
+    profileImageUrl: "",
   });
   const [nationalityQuery, setNationalityQuery] = useState("");
   const [selectedNationality, setSelectedNationality] = useState(null);
@@ -57,6 +59,7 @@ export function ProfileEdit({ navigation }) {
           phone: user?.phone || "",
           sex: user?.sex || "",
           introduction: user?.introduction || "",
+          profileImageUrl: user?.profileImageUrl || "",
         });
         setNationalities(loadedNationalities);
         setSelectedNationality(matchedNationality);
@@ -96,6 +99,7 @@ export function ProfileEdit({ navigation }) {
         phone: form.phone.trim(),
         sex: form.sex || null,
         introduction: form.introduction?.trim() || null,
+        profileImageUrl: form.profileImageUrl?.trim() || null,
         nationalityId: selectedNationality?.id || null,
       });
       navigation.goBack();
@@ -110,6 +114,46 @@ export function ProfileEdit({ navigation }) {
     await logout();
   }
 
+  async function handlePickProfileImage() {
+    setError(null);
+    try {
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted) {
+        setError("사진 접근 권한을 허용해주세요.");
+        return;
+      }
+
+      const picked = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        quality: 0.85,
+        aspect: [1, 1],
+      });
+      if (picked.canceled) {
+        return;
+      }
+
+      const assetUri = picked.assets?.[0]?.uri || "";
+      if (!assetUri) {
+        setError("선택한 이미지를 불러오지 못했습니다.");
+        return;
+      }
+
+      setLoading(true);
+      const uploadResponse = await uploadUserProfileImage(userId, assetUri);
+      const uploadedImageUrl = uploadResponse?.user?.profileImageUrl || "";
+      if (!uploadedImageUrl) {
+        throw new Error("프로필 사진 URL을 받지 못했습니다.");
+      }
+
+      updateField("profileImageUrl", uploadedImageUrl);
+    } catch (requestError) {
+      setError(requestError?.message || "프로필 사진 업로드에 실패했습니다.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
   return (
     <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
       <View style={styles.header}>
@@ -121,6 +165,20 @@ export function ProfileEdit({ navigation }) {
       </View>
 
       <View style={styles.formCard}>
+        <Text style={styles.label}>Profile Photo</Text>
+        <View style={styles.profileImageRow}>
+          <View style={styles.profileImagePreview}>
+            {form.profileImageUrl ? (
+              <Image source={{ uri: form.profileImageUrl }} style={styles.profileImage} />
+            ) : (
+              <Text style={styles.profileImagePlaceholder}>사진</Text>
+            )}
+          </View>
+          <Pressable style={styles.profileImageButton} onPress={handlePickProfileImage} disabled={loading}>
+            <Text style={styles.profileImageButtonText}>사진 선택</Text>
+          </Pressable>
+        </View>
+
         <Text style={styles.label}>Name</Text>
         <TextInput style={styles.input} value={form.name} onChangeText={(v) => updateField("name", v)} />
 
@@ -221,6 +279,47 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFF",
     paddingHorizontal: 12,
     paddingVertical: 10,
+  },
+  profileImageRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginBottom: 4,
+  },
+  profileImagePreview: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    borderWidth: 1,
+    borderColor: "#D5D5D5",
+    backgroundColor: "#EEF2F8",
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden",
+  },
+  profileImage: {
+    width: "100%",
+    height: "100%",
+  },
+  profileImagePlaceholder: {
+    color: "#768399",
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  profileImageButton: {
+    height: 38,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    borderWidth: 1,
+    borderColor: "#C9D3E7",
+    backgroundColor: "#F8FAFD",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  profileImageButtonText: {
+    color: "#4A5A78",
+    fontSize: 13,
+    fontWeight: "700",
   },
   textArea: {
     minHeight: 70,
