@@ -21,6 +21,7 @@ import Quick from "../../icons/quick.svg";
 import Speech from "../../icons/speech.svg";
 import { useAuth } from "../../auth";
 import { decodeUserIdFromToken } from "../../auth/userId";
+import { useLocale } from "../../locale";
 import {
   createSavedCafe,
   createSavedRestaurant,
@@ -41,15 +42,15 @@ import { fetchAllCities } from "../../services/placeService";
 import { pickCurrentTrip } from "../../utils/trip";
 
 const CHIPS = [
-  { id: "restaurant", label: "#식당", supported: true },
-  { id: "cafe", label: "#카페", supported: true },
-  { id: "shopping", label: "#쇼핑", supported: false },
-  { id: "fun", label: "#놀거리", supported: false },
+  { id: "restaurant", labelKo: "#식당", labelEn: "#Food", supported: true },
+  { id: "cafe", labelKo: "#카페", labelEn: "#Cafe", supported: true },
+  { id: "shopping", labelKo: "#쇼핑", labelEn: "#Shopping", supported: false },
+  { id: "fun", labelKo: "#놀거리", labelEn: "#Activities", supported: false },
 ];
 const HOME_MODE_TRAVELER = "TRAVELER";
 const HOME_MODE_LOCAL = "LOCAL";
 
-function ChipRow({ activeId, onSelect }) {
+function ChipRow({ activeId, onSelect, tx }) {
   return (
     <ScrollView
       horizontal
@@ -70,7 +71,7 @@ function ChipRow({ activeId, onSelect }) {
             ]}
           >
             <Text style={[styles.chipText, active && styles.chipTextActive]}>
-              {chip.label}
+              {tx(chip.labelKo, chip.labelEn)}
             </Text>
           </Pressable>
         );
@@ -137,6 +138,7 @@ function resolveCityCenter(city, placesByType) {
 export function MainScreen() {
   const navigation = useNavigation();
   const { token, logout } = useAuth();
+  const { tx, isKorean } = useLocale();
   const [currentTime, setCurrentTime] = useState("");
 
   useFocusEffect(
@@ -145,10 +147,10 @@ export function MainScreen() {
         new Date().toLocaleTimeString("en-US", {
           hour: "numeric",
           minute: "2-digit",
-          hour12: true,
+          hour12: !isKorean,
         }),
       );
-    }, []),
+    }, [isKorean]),
   );
 
   const [homeMode, setHomeMode] = useState(HOME_MODE_TRAVELER);
@@ -190,6 +192,15 @@ export function MainScreen() {
 
     return tripCity || localCity || null;
   }, [homeMode, localCity, tripCity]);
+  const selectedCityDisplayName = useMemo(() => {
+    if (!selectedCity) {
+      return "";
+    }
+    if (isKorean) {
+      return selectedCity?.cityNameKorean || selectedCity?.name || selectedCity?.cityNameEnglish || "";
+    }
+    return selectedCity?.cityNameEnglish || selectedCity?.name || selectedCity?.cityNameKorean || "";
+  }, [isKorean, selectedCity]);
 
   async function enrichWithImages(items, type) {
     return Promise.all(
@@ -253,7 +264,7 @@ export function MainScreen() {
       if (requestSequence !== placeRequestSequenceRef.current) {
         return;
       }
-      setPlaceError("장소를 불러오는 중입니다. 잠시 후 다시 시도해주세요.");
+      setPlaceError(tx("장소를 불러오는 중입니다. 잠시 후 다시 시도해주세요.", "Failed to load places. Please try again."));
       setPlaces(cachedPlaces);
     } finally {
       if (requestSequence === placeRequestSequenceRef.current) {
@@ -392,14 +403,14 @@ export function MainScreen() {
         setLocalMingleRows(rows);
       } catch {
         setLocalMingleRows([]);
-        setLocalMingleError("밍글 지도를 불러오지 못했습니다.");
+        setLocalMingleError(tx("밍글 지도를 불러오지 못했습니다.", "Failed to load mingle map."));
       } finally {
         setLocalMingleLoading(false);
       }
     }
 
     loadLocalMingles();
-  }, [homeMode, selectedCity?.id, homeDataVersion]);
+  }, [homeMode, selectedCity?.id, homeDataVersion, tx]);
 
   async function handleSave(placeId) {
     if (activePlaceType === "cafe") {
@@ -463,13 +474,13 @@ export function MainScreen() {
 
         return {
           id: row?.mingle?.id,
-          title: row?.mingle?.title || "밍글",
+          title: row?.mingle?.title || tx("밍글", "Mingle"),
           coordinate: { latitude, longitude },
           minglerCount: row?.minglers?.length ?? 0,
         };
       })
       .filter(Boolean);
-  }, [localMingleRows]);
+  }, [localMingleRows, tx]);
   const localMapRegion = useMemo(() => {
     if (localMarkers.length > 0) {
       return {
@@ -497,7 +508,7 @@ export function MainScreen() {
             <Person />
           </Pressable>
           <Pressable style={styles.logoutMiniButton} onPress={logout}>
-            <Text style={styles.logoutMiniButtonText}>로그아웃</Text>
+            <Text style={styles.logoutMiniButtonText}>{tx("로그아웃", "Logout")}</Text>
           </Pressable>
         </View>
 
@@ -515,7 +526,7 @@ export function MainScreen() {
                 homeMode === HOME_MODE_TRAVELER && styles.modeToggleTextActive,
               ]}
             >
-              여행자
+              {tx("여행자", "Traveler")}
             </Text>
           </Pressable>
           <Pressable
@@ -531,7 +542,7 @@ export function MainScreen() {
                 homeMode === HOME_MODE_LOCAL && styles.modeToggleTextActive,
               ]}
             >
-              로컬
+              {tx("로컬", "Local")}
             </Text>
           </Pressable>
         </View>
@@ -543,13 +554,13 @@ export function MainScreen() {
             </Text>
           </View>
           <View style={styles.locationRow}>
-            <Text style={styles.locationKo}>
-              {selectedCity?.name || "어디로 떠나시나요?"}
+          <Text style={styles.locationKo}>
+              {selectedCityDisplayName || tx("어디로 떠나시나요?", "Where to next?")}
             </Text>
             <Position width={18} height={18} />
           </View>
           <Text style={styles.locationEn}>
-            {selectedCity?.name || "Where is next?"}
+            {selectedCityDisplayName || tx("어디로 떠나시나요?", "Where to next?")}
           </Text>
         </View>
 
@@ -560,9 +571,7 @@ export function MainScreen() {
                 navigation.navigate("Nearby", {
                   cityId: selectedCity?.id,
                   cityName:
-                    selectedCity?.cityNameKorean ||
-                    selectedCity?.cityNameEnglish ||
-                    selectedCity?.name ||
+                    selectedCityDisplayName ||
                     "",
                   cityLatitude: nearbyCityCenter?.latitude ?? null,
                   cityLongitude: nearbyCityCenter?.longitude ?? null,
@@ -580,13 +589,13 @@ export function MainScreen() {
                   style={StyleSheet.absoluteFill}
                 />
                 <View style={styles.quickCardHeader}>
-                  <Text style={styles.nearbyTitle}>근처 밍글러</Text>
+                <Text style={styles.nearbyTitle}>{tx("근처 밍글러", "Nearby Minglers")}</Text>
                   <Direction width={18} height={18} />
                 </View>
                 <Text style={styles.nearbyBody}>
                   {currentTrip?.title
-                    ? `${currentTrip.title} 같이 하실 분`
-                    : "여행자를 만나보세요"}
+                    ? tx(`${currentTrip.title} 같이 하실 분`, `${currentTrip.title} companions`)
+                    : tx("여행자를 만나보세요", "Meet travelers")}
                 </Text>
               </View>
             </TouchableWithoutFeedback>
@@ -614,8 +623,8 @@ export function MainScreen() {
                     ]}
                   >
                     {quickMatchEnabled
-                      ? "빠른 매칭"
-                      : "지금은 사용할 수 없어요."}
+                      ? tx("빠른 매칭", "Quick Match")
+                      : tx("지금은 사용할 수 없어요.", "Not available now.")}
                   </Text>
                 </View>
               </TouchableWithoutFeedback>
@@ -629,7 +638,7 @@ export function MainScreen() {
                       <Text style={styles.communityBadgeText}>2</Text>
                     </View>
                   </View>
-                  <Text style={styles.quickButtonText}>로컬 커뮤니티</Text>
+                  <Text style={styles.quickButtonText}>{tx("로컬 커뮤니티", "Local Community")}</Text>
                 </View>
               </TouchableWithoutFeedback>
             </View>
@@ -638,13 +647,13 @@ export function MainScreen() {
 
         {homeMode === HOME_MODE_TRAVELER ? (
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>실시간 인기</Text>
+            <Text style={styles.sectionTitle}>{tx("실시간 인기", "Trending Now")}</Text>
             <Text style={styles.sectionTime}>{currentTime}</Text>
           </View>
         ) : null}
 
         {homeMode === HOME_MODE_TRAVELER ? (
-          <ChipRow activeId={activeChip} onSelect={setActiveChip} />
+          <ChipRow activeId={activeChip} onSelect={setActiveChip} tx={tx} />
         ) : null}
 
         {homeMode === HOME_MODE_TRAVELER ? (
@@ -706,7 +715,7 @@ export function MainScreen() {
             ))}
             {activePlaceType == null ? (
               <Text style={styles.emptyText}>
-                해당 태그는 아직 준비 중입니다.
+                {tx("해당 태그는 아직 준비 중입니다.", "This tag is coming soon.")}
               </Text>
             ) : null}
             {activePlaceType != null && placeLoading ? (
@@ -714,8 +723,8 @@ export function MainScreen() {
                 <ActivityIndicator size="small" color="#1C73F0" />
                 <Text style={styles.pendingText}>
                   {activePlaceType === "cafe"
-                    ? "카페를 불러오는 중..."
-                    : "식당을 불러오는 중..."}
+                    ? tx("카페를 불러오는 중...", "Loading cafes...")
+                    : tx("식당을 불러오는 중...", "Loading restaurants...")}
                 </Text>
               </View>
             ) : null}
@@ -726,11 +735,11 @@ export function MainScreen() {
             !placeLoading &&
             !placeError &&
             visiblePlaces.length === 0 ? (
-              <Text style={styles.emptyText}>표시할 장소가 없습니다.</Text>
+              <Text style={styles.emptyText}>{tx("표시할 장소가 없습니다.", "No places to show.")}</Text>
             ) : null}
 
             <View style={styles.moreRow}>
-              <Text style={styles.moreText}>더보기</Text>
+              <Text style={styles.moreText}>{tx("더보기", "More")}</Text>
               <Ionicons name="chevron-forward" size={14} color="#818181" />
             </View>
           </View>
@@ -739,15 +748,15 @@ export function MainScreen() {
         {homeMode === HOME_MODE_LOCAL ? (
           <View style={styles.localMapPanel}>
             <View style={styles.localMapHeader}>
-              <Text style={styles.localMapTitle}>현재 밍글 지도</Text>
+              <Text style={styles.localMapTitle}>{tx("현재 밍글 지도", "Live Mingle Map")}</Text>
               <Text style={styles.localMapSubtitle}>
-                {selectedCity?.name || "도시를 설정해주세요."}
+                {selectedCity?.name || tx("도시를 설정해주세요.", "Set a city.")}
               </Text>
             </View>
             {localMingleLoading ? (
               <View style={styles.pendingWrap}>
                 <ActivityIndicator size="small" color="#1C73F0" />
-                <Text style={styles.pendingText}>밍글을 불러오는 중...</Text>
+                <Text style={styles.pendingText}>{tx("밍글을 불러오는 중...", "Loading mingles...")}</Text>
               </View>
             ) : null}
             {localMingleError ? (
@@ -764,7 +773,7 @@ export function MainScreen() {
                     key={marker.id}
                     coordinate={marker.coordinate}
                     title={marker.title}
-                    description={`참여 ${marker.minglerCount}명`}
+                    description={tx(`참여 ${marker.minglerCount}명`, `${marker.minglerCount} joined`)}
                   />
                 ))}
               </MapView>
@@ -773,7 +782,7 @@ export function MainScreen() {
             !localMingleError &&
             localMarkers.length === 0 ? (
               <Text style={styles.localMapEmptyText}>
-                표시할 밍글 좌표가 없습니다.
+                {tx("표시할 밍글 좌표가 없습니다.", "No mingle coordinates to show.")}
               </Text>
             ) : null}
           </View>
