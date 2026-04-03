@@ -21,3 +21,7 @@ export function joinMingleChatRoom(mingleId) {
 export function fetchChatMessages(chatRoomId) {
   return get(`/chatrooms/${chatRoomId}/messages`);
 }
+
+export function markChatRoomAsRead(chatRoomId) {
+  return post(`/chatrooms/${chatRoomId}/read`);
+}
