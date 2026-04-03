@@ -440,7 +440,7 @@ const styles = StyleSheet.create({
   historyMascotImage: {
     position: "absolute",
     right: 4,
-    bottom: -30,
+    bottom: -40,
     width: 232,
     height: 188,
   },
