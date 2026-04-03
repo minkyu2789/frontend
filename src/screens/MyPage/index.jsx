@@ -334,10 +334,10 @@ export function MyPage({ navigation }) {
 
         <View style={styles.locationCard}>
           <View style={styles.locationTopRow}>
-            <Text style={styles.locationTitle}>{getCityNameKo(currentCity)}</Text>
+            <Text style={styles.locationTitle}>{isKorean ? getCityNameKo(currentCity) : getCityNameEn(currentCity)}</Text>
             <DirectionBlack />
           </View>
-          <Text style={styles.locationSub}>{getCityNameEn(currentCity)}</Text>
+          <Text style={styles.locationSub}>{isKorean ? getCityNameEn(currentCity) : getCityNameKo(currentCity)}</Text>
           <View style={styles.locationDivider} />
           <Text style={styles.locationMeta}>
             {mingleDaysInCurrentArea ? tx(`이 동네에서 ${mingleDaysInCurrentArea}일째 밍글 중!`, `Mingling here for ${mingleDaysInCurrentArea} day(s)!`) : tx("현재 여행 지역을 설정해보세요.", "Set your current travel area.")}
