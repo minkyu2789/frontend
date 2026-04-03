@@ -7,26 +7,11 @@ import { useAuth } from "../../auth";
 import { decodeUserIdFromToken } from "../../auth/userId";
 import { createMingle, fetchMingleMinglers, fetchMingles, joinMingle, leaveMingle } from "../../services/mingleService";
 import { fetchGooglePlaceDetails, searchGooglePlaces } from "../../services/googlePlacesService";
-import { fetchUsers } from "../../services/userService";
-
-const TAB_LIGHTNING = "LIGHTNING";
-const TAB_GROUP = "GROUP";
+ 
 const GROUP_SIZE_FILTER_ALL = "ALL";
 const GROUP_SIZE_FILTER_1 = "1";
 const GROUP_SIZE_FILTER_2 = "2";
 const GROUP_SIZE_FILTER_3PLUS = "3+";
-
-function toSexLabel(sex) {
-  if (sex === "MALE") {
-    return "남성";
-  }
-
-  if (sex === "FEMALE") {
-    return "여성";
-  }
-
-  return "-";
-}
 
 function toRelativeTimeLabel(isoString) {
   if (!isoString) {
@@ -77,22 +62,11 @@ function isValidCoordinatePair(latitude, longitude) {
   return true;
 }
 
-function toMinglePhaseLabel(createdDateTime) {
-  if (!createdDateTime) {
-    return "기록";
-  }
-
-  const diffMs = new Date(createdDateTime).getTime() - Date.now();
-  return diffMs > 0 ? "예정" : "기록";
-}
-
 export function Nearby({ route }) {
   const { token } = useAuth();
-  const [activeTab, setActiveTab] = useState(TAB_LIGHTNING);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [mingleRows, setMingleRows] = useState([]);
-  const [usersById, setUsersById] = useState({});
   const [joinedMingleIdSet, setJoinedMingleIdSet] = useState(new Set());
   const [groupSizeFilter, setGroupSizeFilter] = useState(GROUP_SIZE_FILTER_ALL);
   const [selectedMingleId, setSelectedMingleId] = useState(null);
@@ -131,27 +105,6 @@ export function Nearby({ route }) {
   }, [cityLatitude, cityLongitude]);
   const currentUserId = useMemo(() => decodeUserIdFromToken(token), [token]);
 
-  const nearbyProfiles = useMemo(() => {
-    const seen = new Set();
-    const result = [];
-
-    mingleRows.forEach((row) => {
-      (row.minglers ?? []).forEach((mingler) => {
-        if (!mingler?.userId || seen.has(mingler.userId)) {
-          return;
-        }
-
-        seen.add(mingler.userId);
-        result.push({
-          userId: mingler.userId,
-          mingleId: row.mingle?.id,
-        });
-      });
-    });
-
-    return result;
-  }, [mingleRows]);
-
   const filteredGroupRows = useMemo(() => {
     if (groupSizeFilter === GROUP_SIZE_FILTER_ALL) {
       return mingleRows;
@@ -182,8 +135,6 @@ export function Nearby({ route }) {
           id: row?.mingle?.id,
           title: row?.mingle?.title || "제목 없음",
           description: row?.mingle?.description || "",
-          phase: toMinglePhaseLabel(row?.mingle?.createdDateTime),
-          createdDateTime: row?.mingle?.createdDateTime,
           coordinate: { latitude, longitude },
         };
       })
@@ -232,21 +183,9 @@ export function Nearby({ route }) {
     setError(null);
 
     try {
-      const [mingleResponse, userResponse] = await Promise.all([
-        fetchMingles(Number.isFinite(cityId) && cityId > 0 ? { cityId } : undefined),
-        fetchUsers(),
-      ]);
+      const mingleResponse = await fetchMingles(Number.isFinite(cityId) && cityId > 0 ? { cityId } : undefined);
 
       const mingles = mingleResponse?.mingles ?? [];
-      const users = userResponse?.users ?? [];
-
-      const userMap = users.reduce((acc, user) => {
-        if (user?.id) {
-          acc[user.id] = user;
-        }
-
-        return acc;
-      }, {});
 
       const minglersByMingle = await Promise.all(
         mingles.map(async (mingle) => {
@@ -271,14 +210,12 @@ export function Nearby({ route }) {
           .filter(Boolean),
       );
 
-      setUsersById(userMap);
       setMingleRows(rows);
       setJoinedMingleIdSet(nextJoinedSet);
       if (!selectedMingleId && rows.length > 0) {
         setSelectedMingleId(rows[0]?.mingle?.id ?? null);
       }
     } catch {
-      setUsersById({});
       setMingleRows([]);
       setJoinedMingleIdSet(new Set());
       setError("근처 밍글러 정보를 불러오지 못했습니다.");
@@ -449,113 +386,65 @@ export function Nearby({ route }) {
 
   return (
     <View style={styles.container}>
-      <View style={styles.tabRow}>
-        <Pressable
-          style={[styles.tabButton, activeTab === TAB_LIGHTNING && styles.tabButtonActive]}
-          onPress={() => setActiveTab(TAB_LIGHTNING)}
-        >
-          <Text style={[styles.tabText, activeTab === TAB_LIGHTNING && styles.tabTextActive]}>번개</Text>
-        </Pressable>
-        <Pressable
-          style={[styles.tabButton, activeTab === TAB_GROUP && styles.tabButtonActive]}
-          onPress={() => {
-            setActiveTab(TAB_GROUP);
-            setGroupSizeFilter(GROUP_SIZE_FILTER_ALL);
-          }}
-        >
-          <Text style={[styles.tabText, activeTab === TAB_GROUP && styles.tabTextActive]}>소모임</Text>
+      <View style={styles.headerRow}>
+        <Text style={styles.headerTitle}>로컬 밍글러</Text>
+        <Pressable style={styles.createMingleButton} onPress={() => setCreateModalVisible(true)}>
+          <Ionicons name="add" size={16} color="#FFFFFF" />
+          <Text style={styles.createMingleButtonText}>밍글 만들기</Text>
         </Pressable>
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
-        {activeTab === TAB_GROUP ? (
-          <View style={styles.groupFilterHeader}>
-            <View style={styles.groupFilterRow}>
-              {[
-                GROUP_SIZE_FILTER_ALL,
-                GROUP_SIZE_FILTER_1,
-                GROUP_SIZE_FILTER_2,
-                GROUP_SIZE_FILTER_3PLUS,
-              ].map((filter) => {
-                const active = groupSizeFilter === filter;
-                return (
-                  <Pressable
-                    key={filter}
-                    style={[styles.groupFilterChip, active && styles.groupFilterChipActive]}
-                    onPress={() => setGroupSizeFilter(filter)}
-                  >
-                    <Text style={[styles.groupFilterText, active && styles.groupFilterTextActive]}>
-                      {filter === GROUP_SIZE_FILTER_ALL ? "전체" : `${filter}인`}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-            <Pressable style={styles.createMingleButton} onPress={() => setCreateModalVisible(true)}>
-              <Ionicons name="add" size={16} color="#FFFFFF" />
-              <Text style={styles.createMingleButtonText}>밍글 만들기</Text>
-            </Pressable>
+        <View style={styles.groupFilterHeader}>
+          <View style={styles.groupFilterRow}>
+            {[
+              GROUP_SIZE_FILTER_ALL,
+              GROUP_SIZE_FILTER_1,
+              GROUP_SIZE_FILTER_2,
+              GROUP_SIZE_FILTER_3PLUS,
+            ].map((filter) => {
+              const active = groupSizeFilter === filter;
+              return (
+                <Pressable
+                  key={filter}
+                  style={[styles.groupFilterChip, active && styles.groupFilterChipActive]}
+                  onPress={() => setGroupSizeFilter(filter)}
+                >
+                  <Text style={[styles.groupFilterText, active && styles.groupFilterTextActive]}>
+                    {filter === GROUP_SIZE_FILTER_ALL ? "전체" : `${filter}인`}
+                  </Text>
+                </Pressable>
+              );
+            })}
           </View>
-        ) : null}
+        </View>
 
         {loading ? <Text style={styles.infoText}>불러오는 중...</Text> : null}
         {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
-        {!loading && !error && activeTab === TAB_LIGHTNING
-          ? nearbyProfiles.map((profile) => {
-              const user = usersById[profile.userId];
-              if (!user) {
-                return null;
-              }
-
-              const joined = joinedMingleIdSet.has(profile.mingleId);
-
-              return (
-                <View key={`${profile.userId}-${profile.mingleId}`} style={styles.card}>
-                  <View style={styles.cardBody}>
-                    <Text style={styles.name}>{user?.name || `USER#${user?.id}`}</Text>
-                    <Text style={styles.meta}>{toSexLabel(user?.sex)}</Text>
-                    <Text style={styles.description} numberOfLines={2}>
-                      {user?.introduction || "소개가 아직 없어요."}
-                    </Text>
-                  </View>
-                  <Pressable
-                    style={[styles.actionButton, joined && styles.actionButtonActive]}
-                    onPress={() => handleToggleJoin(profile.mingleId)}
+        {!loading && !error ? (
+          <>
+            <View style={styles.mapCard}>
+              <Text style={styles.mapTitle}>밍글 지도</Text>
+              <Text style={styles.mapSubtitle}>카드를 선택하면 지도에서 해당 밍글 위치가 강조됩니다.</Text>
+              <MapView style={styles.map} region={mapRegion}>
+                {mingleMarkers.map((marker) => (
+                  <Marker
+                    key={marker.id}
+                    coordinate={marker.coordinate}
+                    onPress={() => setSelectedMingleId(marker.id)}
                   >
-                    <Text style={[styles.actionButtonText, joined && styles.actionButtonTextActive]}>
-                      {joined ? "취소" : "밍글"}
-                    </Text>
-                  </Pressable>
-                </View>
-              );
-            })
-          : null}
+                    <View style={[
+                      styles.markerDot,
+                      Number(selectedMingleId) === Number(marker.id) ? styles.markerDotActive : styles.markerDotInactive,
+                    ]} />
+                  </Marker>
+                ))}
+              </MapView>
+              {mingleMarkers.length === 0 ? <Text style={styles.mapEmpty}>표시 가능한 밍글 좌표가 없습니다.</Text> : null}
+            </View>
 
-        {!loading && !error && activeTab === TAB_GROUP
-          ? (
-            <>
-              <View style={styles.mapCard}>
-                <Text style={styles.mapTitle}>밍글 지도</Text>
-                <Text style={styles.mapSubtitle}>카드를 선택하면 지도에서 해당 밍글 위치를 강조합니다.</Text>
-                <MapView style={styles.map} region={mapRegion}>
-                  {mingleMarkers.map((marker) => (
-                    <Marker
-                      key={marker.id}
-                      coordinate={marker.coordinate}
-                      onPress={() => setSelectedMingleId(marker.id)}
-                    >
-                      <View style={[
-                        styles.markerDot,
-                        Number(selectedMingleId) === Number(marker.id) ? styles.markerDotActive : styles.markerDotInactive,
-                      ]} />
-                    </Marker>
-                  ))}
-                </MapView>
-                {mingleMarkers.length === 0 ? <Text style={styles.mapEmpty}>표시 가능한 밍글 좌표가 없습니다.</Text> : null}
-              </View>
-
-              {filteredGroupRows.map((row) => {
+            {filteredGroupRows.map((row) => {
               const joined = joinedMingleIdSet.has(row?.mingle?.id);
               const minglerCount = row?.minglers?.length ?? 0;
               const selected = Number(selectedMingleId) === Number(row?.mingle?.id);
@@ -583,16 +472,16 @@ export function Nearby({ route }) {
                     onPress={() => handleToggleJoin(row?.mingle?.id)}
                   >
                     <Text style={[styles.actionButtonText, joined && styles.actionButtonTextActive]}>
-                      {joined ? "취소" : "밍글"}
+                      {joined ? "취소" : "참여"}
                     </Text>
                   </Pressable>
                 </Pressable>
               );
             })}
-            </>
-          ) : null}
+          </>
+        ) : null}
 
-        {!loading && !error && ((activeTab === TAB_LIGHTNING && nearbyProfiles.length === 0) || (activeTab === TAB_GROUP && filteredGroupRows.length === 0)) ? (
+        {!loading && !error && filteredGroupRows.length === 0 ? (
           <Text style={styles.infoText}>표시할 항목이 없습니다.</Text>
         ) : null}
       </ScrollView>
@@ -605,11 +494,10 @@ export function Nearby({ route }) {
             <Pressable
               style={styles.drawerPrimaryButton}
               onPress={() => {
-                setActiveTab(TAB_GROUP);
                 setDrawerVisible(false);
               }}
             >
-              <Text style={styles.drawerPrimaryButtonText}>소모임 지도 보기</Text>
+              <Text style={styles.drawerPrimaryButtonText}>지도 보기</Text>
             </Pressable>
             <Pressable style={styles.drawerSecondaryButton} onPress={() => setDrawerVisible(false)}>
               <Text style={styles.drawerSecondaryButtonText}>닫기</Text>
@@ -707,36 +595,21 @@ const styles = StyleSheet.create({
     backgroundColor: "#F1F2F5",
     paddingTop: 18,
   },
-  tabRow: {
+  headerRow: {
     marginHorizontal: 20,
-    flexDirection: "row",
-    backgroundColor: "#E9ECF2",
-    borderRadius: 12,
-    padding: 4,
-  },
-  tabButton: {
-    flex: 1,
-    height: 36,
-    borderRadius: 9,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  tabButtonActive: {
-    backgroundColor: "#FFFFFF",
-  },
-  tabText: {
-    color: "#77819A",
-    fontWeight: "700",
-    fontSize: 14,
-  },
-  tabTextActive: {
-    color: "#1C73F0",
-  },
-  groupFilterHeader: {
+    marginBottom: 8,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    gap: 10,
+    gap: 12,
+  },
+  headerTitle: {
+    color: "#111827",
+    fontSize: 20,
+    fontWeight: "800",
+  },
+  groupFilterHeader: {
+    marginBottom: 2,
   },
   groupFilterRow: {
     flexDirection: "row",
