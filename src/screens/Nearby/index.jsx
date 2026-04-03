@@ -1,10 +1,11 @@
 import { useCallback, useMemo, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
-import MapView, { Callout, Marker } from "react-native-maps";
+import MapView, { Marker } from "react-native-maps";
+import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../../auth";
 import { decodeUserIdFromToken } from "../../auth/userId";
-import { fetchMingleMinglers, fetchMingles, joinMingle, leaveMingle } from "../../services/mingleService";
+import { createMingle, fetchMingleMinglers, fetchMingles, joinMingle, leaveMingle } from "../../services/mingleService";
 import { fetchUsers } from "../../services/userService";
 
 const TAB_LIGHTNING = "LIGHTNING";
@@ -77,6 +78,16 @@ export function Nearby({ route }) {
   const [usersById, setUsersById] = useState({});
   const [joinedMingleIdSet, setJoinedMingleIdSet] = useState(new Set());
   const [groupSizeFilter, setGroupSizeFilter] = useState(GROUP_SIZE_FILTER_ALL);
+  const [selectedMingleId, setSelectedMingleId] = useState(null);
+  const [drawerVisible, setDrawerVisible] = useState(true);
+  const [createModalVisible, setCreateModalVisible] = useState(false);
+  const [createSubmitting, setCreateSubmitting] = useState(false);
+  const [createForm, setCreateForm] = useState({
+    title: "",
+    description: "",
+    placeName: "",
+    meetDateTime: "",
+  });
 
   const cityId = Number(route?.params?.cityId);
   const currentUserId = useMemo(() => decodeUserIdFromToken(token), [token]);
@@ -141,6 +152,16 @@ export function Nearby({ route }) {
   }, [mingleRows]);
 
   const mapRegion = useMemo(() => {
+    const selectedMarker = mingleMarkers.find((marker) => Number(marker.id) === Number(selectedMingleId));
+    if (selectedMarker) {
+      return {
+        latitude: selectedMarker.coordinate.latitude,
+        longitude: selectedMarker.coordinate.longitude,
+        latitudeDelta: 0.045,
+        longitudeDelta: 0.045,
+      };
+    }
+
     if (mingleMarkers.length === 0) {
       return {
         latitude: 37.5665,
@@ -156,7 +177,7 @@ export function Nearby({ route }) {
       latitudeDelta: 0.08,
       longitudeDelta: 0.08,
     };
-  }, [mingleMarkers]);
+  }, [mingleMarkers, selectedMingleId]);
 
   const loadNearby = useCallback(async () => {
     setLoading(true);
@@ -205,6 +226,9 @@ export function Nearby({ route }) {
       setUsersById(userMap);
       setMingleRows(rows);
       setJoinedMingleIdSet(nextJoinedSet);
+      if (!selectedMingleId && rows.length > 0) {
+        setSelectedMingleId(rows[0]?.mingle?.id ?? null);
+      }
     } catch {
       setUsersById({});
       setMingleRows([]);
@@ -213,7 +237,7 @@ export function Nearby({ route }) {
     } finally {
       setLoading(false);
     }
-  }, [cityId, currentUserId]);
+  }, [cityId, currentUserId, selectedMingleId]);
 
   useFocusEffect(
     useCallback(() => {
@@ -239,6 +263,48 @@ export function Nearby({ route }) {
     }
   }
 
+  function resetCreateForm() {
+    setCreateForm({
+      title: "",
+      description: "",
+      placeName: "",
+      meetDateTime: "",
+    });
+  }
+
+  async function handleCreateMingle() {
+    const title = String(createForm.title || "").trim();
+    if (!cityId || !title) {
+      setError("밍글 제목을 입력해주세요.");
+      return;
+    }
+
+    setCreateSubmitting(true);
+    setError(null);
+    try {
+      const response = await createMingle({
+        cityId,
+        title,
+        description: String(createForm.description || "").trim() || null,
+        placeName: String(createForm.placeName || "").trim() || null,
+        meetDateTime: String(createForm.meetDateTime || "").trim() || null,
+        latitude: null,
+        longitude: null,
+      });
+      setCreateModalVisible(false);
+      resetCreateForm();
+      await loadNearby();
+      const createdMingleId = response?.mingle?.id;
+      if (createdMingleId) {
+        setSelectedMingleId(createdMingleId);
+      }
+    } catch {
+      setError("밍글 생성에 실패했습니다.");
+    } finally {
+      setCreateSubmitting(false);
+    }
+  }
+
   return (
     <View style={styles.container}>
       <View style={styles.tabRow}>
@@ -261,26 +327,32 @@ export function Nearby({ route }) {
 
       <ScrollView contentContainerStyle={styles.content}>
         {activeTab === TAB_GROUP ? (
-          <View style={styles.groupFilterRow}>
-            {[
-              GROUP_SIZE_FILTER_ALL,
-              GROUP_SIZE_FILTER_1,
-              GROUP_SIZE_FILTER_2,
-              GROUP_SIZE_FILTER_3PLUS,
-            ].map((filter) => {
-              const active = groupSizeFilter === filter;
-              return (
-                <Pressable
-                  key={filter}
-                  style={[styles.groupFilterChip, active && styles.groupFilterChipActive]}
-                  onPress={() => setGroupSizeFilter(filter)}
-                >
-                  <Text style={[styles.groupFilterText, active && styles.groupFilterTextActive]}>
-                    {filter === GROUP_SIZE_FILTER_ALL ? "전체" : `${filter}인`}
-                  </Text>
-                </Pressable>
-              );
-            })}
+          <View style={styles.groupFilterHeader}>
+            <View style={styles.groupFilterRow}>
+              {[
+                GROUP_SIZE_FILTER_ALL,
+                GROUP_SIZE_FILTER_1,
+                GROUP_SIZE_FILTER_2,
+                GROUP_SIZE_FILTER_3PLUS,
+              ].map((filter) => {
+                const active = groupSizeFilter === filter;
+                return (
+                  <Pressable
+                    key={filter}
+                    style={[styles.groupFilterChip, active && styles.groupFilterChipActive]}
+                    onPress={() => setGroupSizeFilter(filter)}
+                  >
+                    <Text style={[styles.groupFilterText, active && styles.groupFilterTextActive]}>
+                      {filter === GROUP_SIZE_FILTER_ALL ? "전체" : `${filter}인`}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+            <Pressable style={styles.createMingleButton} onPress={() => setCreateModalVisible(true)}>
+              <Ionicons name="add" size={16} color="#FFFFFF" />
+              <Text style={styles.createMingleButtonText}>밍글 만들기</Text>
+            </Pressable>
           </View>
         ) : null}
 
@@ -323,23 +395,18 @@ export function Nearby({ route }) {
             <>
               <View style={styles.mapCard}>
                 <Text style={styles.mapTitle}>밍글 지도</Text>
-                <Text style={styles.mapSubtitle}>좌표가 등록된 밍글 위치를 표시합니다.</Text>
-                <MapView style={styles.map} initialRegion={mapRegion}>
+                <Text style={styles.mapSubtitle}>카드를 선택하면 지도에서 해당 밍글 위치를 강조합니다.</Text>
+                <MapView style={styles.map} region={mapRegion}>
                   {mingleMarkers.map((marker) => (
                     <Marker
                       key={marker.id}
                       coordinate={marker.coordinate}
-                      pinColor={marker.phase === "예정" ? "#1C73F0" : "#687389"}
+                      onPress={() => setSelectedMingleId(marker.id)}
                     >
-                      <Callout>
-                        <View style={styles.callout}>
-                          <Text style={styles.calloutTitle}>{marker.title}</Text>
-                          <Text style={styles.calloutMeta}>
-                            {marker.phase} · {toRelativeTimeLabel(marker.createdDateTime)}
-                          </Text>
-                          {marker.description ? <Text style={styles.calloutDescription}>{marker.description}</Text> : null}
-                        </View>
-                      </Callout>
+                      <View style={[
+                        styles.markerDot,
+                        Number(selectedMingleId) === Number(marker.id) ? styles.markerDotActive : styles.markerDotInactive,
+                      ]} />
                     </Marker>
                   ))}
                 </MapView>
@@ -349,15 +416,24 @@ export function Nearby({ route }) {
               {filteredGroupRows.map((row) => {
               const joined = joinedMingleIdSet.has(row?.mingle?.id);
               const minglerCount = row?.minglers?.length ?? 0;
+              const selected = Number(selectedMingleId) === Number(row?.mingle?.id);
+              const meetAtText = row?.mingle?.meetDateTime ? toRelativeTimeLabel(row?.mingle?.meetDateTime) : "시간 미정";
+              const placeNameText = row?.mingle?.placeName || "장소 미정";
 
               return (
-                <View key={row?.mingle?.id} style={styles.card}>
+                <Pressable
+                  key={row?.mingle?.id}
+                  style={[styles.card, selected && styles.cardSelected]}
+                  onPress={() => setSelectedMingleId(row?.mingle?.id)}
+                >
                   <View style={styles.cardBody}>
                     <Text style={styles.name}>{row?.mingle?.title || "제목 없음"}</Text>
                     <Text style={styles.meta}>{toRelativeTimeLabel(row?.mingle?.createdDateTime)}</Text>
                     <Text style={styles.description} numberOfLines={2}>
                       {row?.mingle?.description || "같이할 밍글러를 기다리고 있어요."}
                     </Text>
+                    <Text style={styles.placeText}>📍 {placeNameText}</Text>
+                    <Text style={styles.meetText}>🕒 {meetAtText}</Text>
                     <Text style={styles.countText}>참여 중 {minglerCount}명</Text>
                   </View>
                   <Pressable
@@ -368,7 +444,7 @@ export function Nearby({ route }) {
                       {joined ? "취소" : "밍글"}
                     </Text>
                   </Pressable>
-                </View>
+                </Pressable>
               );
             })}
             </>
@@ -378,6 +454,70 @@ export function Nearby({ route }) {
           <Text style={styles.infoText}>표시할 항목이 없습니다.</Text>
         ) : null}
       </ScrollView>
+
+      <Modal visible={drawerVisible} transparent animationType="slide" onRequestClose={() => setDrawerVisible(false)}>
+        <View style={styles.drawerOverlay}>
+          <View style={styles.drawerCard}>
+            <Text style={styles.drawerTitle}>원하는 밍글러를 만나보세요</Text>
+            <Text style={styles.drawerDescription}>로컬 밍글러 소모임 지도를 바로 확인할 수 있어요.</Text>
+            <Pressable
+              style={styles.drawerPrimaryButton}
+              onPress={() => {
+                setActiveTab(TAB_GROUP);
+                setDrawerVisible(false);
+              }}
+            >
+              <Text style={styles.drawerPrimaryButtonText}>소모임 지도 보기</Text>
+            </Pressable>
+            <Pressable style={styles.drawerSecondaryButton} onPress={() => setDrawerVisible(false)}>
+              <Text style={styles.drawerSecondaryButtonText}>닫기</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={createModalVisible} transparent animationType="slide" onRequestClose={() => setCreateModalVisible(false)}>
+        <View style={styles.drawerOverlay}>
+          <View style={styles.drawerCard}>
+            <Text style={styles.drawerTitle}>새 밍글 만들기</Text>
+            <TextInput
+              style={styles.formInput}
+              value={createForm.title}
+              onChangeText={(value) => setCreateForm((prev) => ({ ...prev, title: value }))}
+              placeholder="제목 (필수)"
+            />
+            <TextInput
+              style={styles.formInput}
+              value={createForm.placeName}
+              onChangeText={(value) => setCreateForm((prev) => ({ ...prev, placeName: value }))}
+              placeholder="어디서 만날까요? (선택)"
+            />
+            <TextInput
+              style={styles.formInput}
+              value={createForm.meetDateTime}
+              onChangeText={(value) => setCreateForm((prev) => ({ ...prev, meetDateTime: value }))}
+              placeholder="언제 만날까요? 예: 2026-04-05T19:30:00 (선택)"
+            />
+            <TextInput
+              style={[styles.formInput, styles.formInputMultiline]}
+              value={createForm.description}
+              onChangeText={(value) => setCreateForm((prev) => ({ ...prev, description: value }))}
+              placeholder="설명 (선택)"
+              multiline
+            />
+            <Pressable
+              style={[styles.drawerPrimaryButton, createSubmitting && styles.confirmDisabled]}
+              onPress={handleCreateMingle}
+              disabled={createSubmitting}
+            >
+              <Text style={styles.drawerPrimaryButtonText}>{createSubmitting ? "생성 중..." : "밍글 생성"}</Text>
+            </Pressable>
+            <Pressable style={styles.drawerSecondaryButton} onPress={() => setCreateModalVisible(false)} disabled={createSubmitting}>
+              <Text style={styles.drawerSecondaryButtonText}>취소</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -413,9 +553,17 @@ const styles = StyleSheet.create({
   tabTextActive: {
     color: "#1C73F0",
   },
+  groupFilterHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+  },
   groupFilterRow: {
     flexDirection: "row",
     gap: 8,
+    flex: 1,
+    flexWrap: "wrap",
   },
   groupFilterChip: {
     borderRadius: 999,
@@ -456,6 +604,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 12,
   },
+  cardSelected: {
+    borderColor: "#8DB9FF",
+    backgroundColor: "#EAF3FF",
+  },
   cardBody: {
     flex: 1,
     gap: 4,
@@ -479,6 +631,14 @@ const styles = StyleSheet.create({
     color: "#6A7388",
     fontSize: 12,
     marginTop: 2,
+  },
+  placeText: {
+    color: "#41506E",
+    fontSize: 12,
+  },
+  meetText: {
+    color: "#41506E",
+    fontSize: 12,
   },
   actionButton: {
     minWidth: 64,
@@ -540,22 +700,100 @@ const styles = StyleSheet.create({
     color: "#6F778B",
     fontSize: 12,
   },
-  callout: {
-    minWidth: 180,
-    maxWidth: 240,
-    gap: 2,
+  markerDot: {
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    borderWidth: 2,
   },
-  calloutTitle: {
-    color: "#101827",
+  markerDotActive: {
+    backgroundColor: "#1C73F0",
+    borderColor: "#DDEBFF",
+  },
+  markerDotInactive: {
+    backgroundColor: "#A7B1C4",
+    borderColor: "#EEF2F8",
+  },
+  drawerOverlay: {
+    flex: 1,
+    justifyContent: "flex-end",
+    backgroundColor: "rgba(0,0,0,0.32)",
+  },
+  drawerCard: {
+    backgroundColor: "#FFFFFF",
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingHorizontal: 18,
+    paddingTop: 16,
+    paddingBottom: 28,
+    gap: 10,
+  },
+  drawerTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#111827",
+  },
+  drawerDescription: {
+    fontSize: 13,
+    color: "#4B5563",
+    lineHeight: 19,
+  },
+  drawerPrimaryButton: {
+    height: 44,
+    borderRadius: 999,
+    backgroundColor: "#1C73F0",
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 6,
+  },
+  drawerPrimaryButtonText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "700",
+  },
+  drawerSecondaryButton: {
+    height: 40,
+    borderRadius: 999,
+    backgroundColor: "#F3F6FB",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  drawerSecondaryButtonText: {
+    color: "#334155",
     fontSize: 13,
     fontWeight: "700",
   },
-  calloutMeta: {
-    color: "#5F6980",
-    fontSize: 11,
+  createMingleButton: {
+    height: 32,
+    borderRadius: 999,
+    backgroundColor: "#1C73F0",
+    paddingHorizontal: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+    gap: 5,
   },
-  calloutDescription: {
-    color: "#25314D",
+  createMingleButtonText: {
+    color: "#FFFFFF",
     fontSize: 12,
+    fontWeight: "700",
+  },
+  formInput: {
+    minHeight: 42,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#D5DEEB",
+    paddingHorizontal: 12,
+    backgroundColor: "#FFFFFF",
+    fontSize: 13,
+    color: "#111827",
+  },
+  formInputMultiline: {
+    minHeight: 90,
+    paddingTop: 10,
+    textAlignVertical: "top",
+  },
+  confirmDisabled: {
+    opacity: 0.6,
   },
 });
