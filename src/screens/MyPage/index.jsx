@@ -354,6 +354,7 @@ export function MyPage({ navigation }) {
             const tripCity = citiesById[trip?.cityId] || null;
             const safeTripId = Number(trip?.id || 0);
             const recentTripChatAvatars = getRecentTripChatAvatars(trip);
+            const cardImageUrl = tripCity?.representativeImageUrl || null;
             return (
               <Pressable
                 key={trip.id}
@@ -361,35 +362,39 @@ export function MyPage({ navigation }) {
                 onPress={() => openTripEditor(safeTripId)}
                 disabled={safeTripId <= 0}
               >
-                <View style={styles.tripHead}>
-                  <TravelIcon />
-                  <Pressable
-                    style={styles.tripArrowButton}
-                    hitSlop={12}
-                    onPress={() => openTripEditor(safeTripId)}
-                    disabled={safeTripId <= 0}
-                  >
-                    <Ionicons name="chevron-forward" size={18} color="#111111" />
-                  </Pressable>
-                </View>
-                {recentTripChatAvatars.length > 0 ? (
-                  <View style={styles.tripAvatarRow}>
-                    {recentTripChatAvatars.map((avatar, index) => (
-                      <View
-                        key={`${trip.id}-${avatar.userId}`}
-                        style={[styles.tripAvatarCircle, index > 0 && styles.tripAvatarOverlap]}
-                      >
-                        {avatar.imageUrl ? (
-                          <Image source={{ uri: avatar.imageUrl }} style={styles.tripAvatarImage} />
-                        ) : (
-                          <Text style={styles.tripAvatarFallbackText}>{avatar.fallbackText}</Text>
-                        )}
-                      </View>
-                    ))}
+                {cardImageUrl ? <Image source={{ uri: cardImageUrl }} style={styles.tripCardBackgroundImage} /> : null}
+                <View style={[styles.tripCardOverlay, cardImageUrl && styles.tripCardOverlayWithImage]} />
+                <View style={styles.tripCardContent}>
+                  <View style={styles.tripHead}>
+                    <TravelIcon />
+                    <Pressable
+                      style={styles.tripArrowButton}
+                      hitSlop={12}
+                      onPress={() => openTripEditor(safeTripId)}
+                      disabled={safeTripId <= 0}
+                    >
+                      <Ionicons name="chevron-forward" size={18} color="#111111" />
+                    </Pressable>
                   </View>
-                ) : null}
-                <Text style={styles.tripTitle}>{getCityNameKo(tripCity)}</Text>
-                <Text style={styles.tripMeta}>{getTripMetaText(trip)}</Text>
+                  {recentTripChatAvatars.length > 0 ? (
+                    <View style={styles.tripAvatarRow}>
+                      {recentTripChatAvatars.map((avatar, index) => (
+                        <View
+                          key={`${trip.id}-${avatar.userId}`}
+                          style={[styles.tripAvatarCircle, index > 0 && styles.tripAvatarOverlap]}
+                        >
+                          {avatar.imageUrl ? (
+                            <Image source={{ uri: avatar.imageUrl }} style={styles.tripAvatarImage} />
+                          ) : (
+                            <Text style={styles.tripAvatarFallbackText}>{avatar.fallbackText}</Text>
+                          )}
+                        </View>
+                      ))}
+                    </View>
+                  ) : null}
+                  <Text style={styles.tripTitle}>{getCityNameKo(tripCity)}</Text>
+                  <Text style={styles.tripMeta}>{getTripMetaText(trip)}</Text>
+                </View>
               </Pressable>
             );
           })}
@@ -514,10 +519,30 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   tripCard: {
-    backgroundColor: "#F2F2F3",
+    backgroundColor: "#EEF1F6",
     borderRadius: 16,
     paddingHorizontal: 18,
     paddingVertical: 15,
+    overflow: "hidden",
+    position: "relative",
+    borderWidth: 1,
+    borderColor: "#FFFFFF",
+  },
+  tripCardBackgroundImage: {
+    ...StyleSheet.absoluteFillObject,
+    width: "100%",
+    height: "100%",
+  },
+  tripCardOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(248,250,252,0.92)",
+  },
+  tripCardOverlayWithImage: {
+    backgroundColor: "rgba(248,250,252,0.82)",
+  },
+  tripCardContent: {
+    position: "relative",
+    zIndex: 1,
   },
   tripHead: {
     flexDirection: "row",
