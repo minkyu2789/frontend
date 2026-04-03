@@ -1,5 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, ImageBackground, Pressable, ScrollView, StyleSheet, Text, TouchableWithoutFeedback, View } from "react-native";
+import {
+  ActivityIndicator,
+  ImageBackground,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableWithoutFeedback,
+  View,
+} from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
@@ -42,7 +51,11 @@ const HOME_MODE_LOCAL = "LOCAL";
 
 function ChipRow({ activeId, onSelect }) {
   return (
-    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      contentContainerStyle={styles.chipRow}
+    >
       {CHIPS.map((chip) => {
         const active = chip.id === activeId;
         return (
@@ -50,9 +63,15 @@ function ChipRow({ activeId, onSelect }) {
             key={chip.id}
             disabled={!chip.supported}
             onPress={() => onSelect(chip.id)}
-            style={[styles.chip, active && styles.chipActive, !chip.supported && styles.chipDisabled]}
+            style={[
+              styles.chip,
+              active && styles.chipActive,
+              !chip.supported && styles.chipDisabled,
+            ]}
           >
-            <Text style={[styles.chipText, active && styles.chipTextActive]}>{chip.label}</Text>
+            <Text style={[styles.chipText, active && styles.chipTextActive]}>
+              {chip.label}
+            </Text>
           </Pressable>
         );
       })}
@@ -72,7 +91,10 @@ export function MainScreen() {
   const [tripCity, setTripCity] = useState(null);
   const [localCity, setLocalCity] = useState(null);
   const [places, setPlaces] = useState([]);
-  const [placesByType, setPlacesByType] = useState({ restaurant: [], cafe: [] });
+  const [placesByType, setPlacesByType] = useState({
+    restaurant: [],
+    cafe: [],
+  });
   const [placeLoading, setPlaceLoading] = useState(false);
   const [placeError, setPlaceError] = useState(null);
   const [homeDataVersion, setHomeDataVersion] = useState(0);
@@ -107,7 +129,10 @@ export function MainScreen() {
     return Promise.all(
       items.map(async (item) => {
         try {
-          const response = type === "cafe" ? await fetchCafeImages(item.id) : await fetchRestaurantImages(item.id);
+          const response =
+            type === "cafe"
+              ? await fetchCafeImages(item.id)
+              : await fetchRestaurantImages(item.id);
           return {
             ...item,
             imageUrl: response?.images?.[0]?.imageUrl || null,
@@ -173,19 +198,36 @@ export function MainScreen() {
 
   async function loadHome() {
     try {
-      const [allCities, tripsResponse, savedRestaurantsResponse, savedCafesResponse, localsResponse] = await Promise.all([
+      const [
+        allCities,
+        tripsResponse,
+        savedRestaurantsResponse,
+        savedCafesResponse,
+        localsResponse,
+      ] = await Promise.all([
         fetchAllCities(),
         fetchTrips(),
         fetchSavedRestaurants(),
         fetchSavedCafes(),
         fetchLocals(),
       ]);
-      const userTrips = (tripsResponse?.trips ?? []).filter((trip) => Number(trip?.userId) === Number(userId));
+      const userTrips = (tripsResponse?.trips ?? []).filter(
+        (trip) => Number(trip?.userId) === Number(userId),
+      );
       const trip = pickCurrentTrip(userTrips);
-      const nextTripCity = allCities.find((item) => Number(item?.id) === Number(trip?.cityId)) || null;
+      const nextTripCity =
+        allCities.find((item) => Number(item?.id) === Number(trip?.cityId)) ||
+        null;
       const latestLocal = (localsResponse?.locals ?? [])[0] || null;
-      const nextLocalCity = allCities.find((item) => Number(item?.id) === Number(latestLocal?.city?.id)) || latestLocal?.city || null;
-      const savedRestaurantMap = (savedRestaurantsResponse?.savedRestaurants ?? []).reduce((acc, saved) => {
+      const nextLocalCity =
+        allCities.find(
+          (item) => Number(item?.id) === Number(latestLocal?.city?.id),
+        ) ||
+        latestLocal?.city ||
+        null;
+      const savedRestaurantMap = (
+        savedRestaurantsResponse?.savedRestaurants ?? []
+      ).reduce((acc, saved) => {
         const placeId = saved?.restaurant?.id;
         if (placeId) {
           acc[placeId] = saved.id;
@@ -193,14 +235,17 @@ export function MainScreen() {
 
         return acc;
       }, {});
-      const savedCafeMap = (savedCafesResponse?.savedCafes ?? []).reduce((acc, saved) => {
-        const placeId = saved?.cafe?.id;
-        if (placeId) {
-          acc[placeId] = saved.id;
-        }
+      const savedCafeMap = (savedCafesResponse?.savedCafes ?? []).reduce(
+        (acc, saved) => {
+          const placeId = saved?.cafe?.id;
+          if (placeId) {
+            acc[placeId] = saved.id;
+          }
 
-        return acc;
-      }, {});
+          return acc;
+        },
+        {},
+      );
 
       setCurrentTrip(trip);
       setTripCity(nextTripCity);
@@ -306,7 +351,10 @@ export function MainScreen() {
       const response = await createSavedCafe(placeId);
       const saved = response?.savedCafe;
       if (saved?.cafe?.id && saved?.id) {
-        setSavedCafeByPlaceId((prev) => ({ ...prev, [saved.cafe.id]: saved.id }));
+        setSavedCafeByPlaceId((prev) => ({
+          ...prev,
+          [saved.cafe.id]: saved.id,
+        }));
       }
       return;
     }
@@ -325,7 +373,10 @@ export function MainScreen() {
     const response = await createSavedRestaurant(placeId);
     const saved = response?.savedRestaurant;
     if (saved?.restaurant?.id && saved?.id) {
-      setSavedRestaurantByPlaceId((prev) => ({ ...prev, [saved.restaurant.id]: saved.id }));
+      setSavedRestaurantByPlaceId((prev) => ({
+        ...prev,
+        [saved.restaurant.id]: saved.id,
+      }));
     }
   }
 
@@ -381,134 +432,231 @@ export function MainScreen() {
 
       <View style={styles.modeToggleRow}>
         <Pressable
-          style={[styles.modeToggleButton, homeMode === HOME_MODE_TRAVELER && styles.modeToggleButtonActive]}
+          style={[
+            styles.modeToggleButton,
+            homeMode === HOME_MODE_TRAVELER && styles.modeToggleButtonActive,
+          ]}
           onPress={() => setHomeMode(HOME_MODE_TRAVELER)}
         >
-          <Text style={[styles.modeToggleText, homeMode === HOME_MODE_TRAVELER && styles.modeToggleTextActive]}>여행자</Text>
+          <Text
+            style={[
+              styles.modeToggleText,
+              homeMode === HOME_MODE_TRAVELER && styles.modeToggleTextActive,
+            ]}
+          >
+            여행자
+          </Text>
         </Pressable>
         <Pressable
-          style={[styles.modeToggleButton, homeMode === HOME_MODE_LOCAL && styles.modeToggleButtonActive]}
+          style={[
+            styles.modeToggleButton,
+            homeMode === HOME_MODE_LOCAL && styles.modeToggleButtonActive,
+          ]}
           onPress={() => setHomeMode(HOME_MODE_LOCAL)}
         >
-          <Text style={[styles.modeToggleText, homeMode === HOME_MODE_LOCAL && styles.modeToggleTextActive]}>로컬</Text>
+          <Text
+            style={[
+              styles.modeToggleText,
+              homeMode === HOME_MODE_LOCAL && styles.modeToggleTextActive,
+            ]}
+          >
+            로컬
+          </Text>
         </Pressable>
       </View>
 
       <View style={styles.locationSection}>
-        <View style={[styles.badge, !quickMatchEnabled && styles.badgeOff]}><Text style={styles.badgeText}>{quickMatchEnabled ? "Now" : "Off"}</Text></View>
+        <View style={[styles.badge, !quickMatchEnabled && styles.badgeOff]}>
+          <Text style={styles.badgeText}>
+            {quickMatchEnabled ? "Now" : "Off"}
+          </Text>
+        </View>
         <View style={styles.locationRow}>
-          <Text style={styles.locationKo}>{selectedCity?.name || "어디로 떠나시나요?"}</Text>
+          <Text style={styles.locationKo}>
+            {selectedCity?.name || "어디로 떠나시나요?"}
+          </Text>
           <Position width={18} height={18} />
         </View>
-        <Text style={styles.locationEn}>{selectedCity?.name || "Where is next?"}</Text>
+        <Text style={styles.locationEn}>
+          {selectedCity?.name || "Where is next?"}
+        </Text>
       </View>
 
       {homeMode === HOME_MODE_TRAVELER ? (
-      <View style={styles.quickRow}>
-        <TouchableWithoutFeedback onPress={() => navigation.navigate("Nearby", { cityId: selectedCity?.id })}>
-          <View style={styles.nearbyCard}>
-            <LinearGradient colors={["rgba(1, 105, 254, 0.5)", "rgb(1, 105, 254)"]} style={StyleSheet.absoluteFill} />
-            <View style={styles.quickCardHeader}>
-              <Text style={styles.nearbyTitle}>근처 밍글러</Text>
-              <Direction width={18} height={18} />
-            </View>
-            <Text style={styles.nearbyBody}>
-              {currentTrip?.title ? `${currentTrip.title} 같이 하실 분` : "여행자를 만나보세요"}
-            </Text>
-          </View>
-        </TouchableWithoutFeedback>
-
-        <View style={styles.rightQuickStack}>
-          <TouchableWithoutFeedback onPress={() => quickMatchEnabled && navigation.navigate("QuickMatch", { cityId: selectedCity?.id })}>
-            <View style={[styles.quickButtonCard, !quickMatchEnabled && styles.quickButtonCardDisabled]}>
-              <Quick />
-              <Text style={[styles.quickButtonText, !quickMatchEnabled && styles.quickButtonTextDisabled]}>
-                {quickMatchEnabled ? "빠른 매칭" : "지금은 사용할 수 없어요."}
+        <View style={styles.quickRow}>
+          <TouchableWithoutFeedback
+            onPress={() =>
+              navigation.navigate("Nearby", { cityId: selectedCity?.id })
+            }
+          >
+            <View style={styles.nearbyCard}>
+              <ImageBackground
+                source={require("../../images/nearbyCardImage.jpg")}
+                style={StyleSheet.absoluteFill}
+                imageStyle={{ borderRadius: 22 }}
+              />
+              <LinearGradient
+                colors={["rgba(1, 105, 254, 0.5)", "rgb(1, 105, 254)"]}
+                style={StyleSheet.absoluteFill}
+              />
+              <View style={styles.quickCardHeader}>
+                <Text style={styles.nearbyTitle}>근처 밍글러</Text>
+                <Direction width={18} height={18} />
+              </View>
+              <Text style={styles.nearbyBody}>
+                {currentTrip?.title
+                  ? `${currentTrip.title} 같이 하실 분`
+                  : "여행자를 만나보세요"}
               </Text>
             </View>
           </TouchableWithoutFeedback>
-          <TouchableWithoutFeedback onPress={() => navigation.navigate("Chats")}>
-            <View style={styles.quickButtonCard}>
-              <View style={styles.communityIconWrap}>
-                <Speech />
-                <View style={styles.communityBadge}><Text style={styles.communityBadgeText}>2</Text></View>
-              </View>
-              <Text style={styles.quickButtonText}>로컬 커뮤니티</Text>
-            </View>
-          </TouchableWithoutFeedback>
-        </View>
-      </View>
-      ) : null}
 
-      {homeMode === HOME_MODE_TRAVELER ? (
-      <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>실시간 인기</Text>
-        <Text style={styles.sectionTime}>AM 9:00</Text>
-      </View>
-      ) : null}
-
-      {homeMode === HOME_MODE_TRAVELER ? <ChipRow activeId={activeChip} onSelect={setActiveChip} /> : null}
-
-      {homeMode === HOME_MODE_TRAVELER ? (
-      <View style={styles.popularPanel}>
-        {visiblePlaces.map((place, idx) => (
-          <Pressable key={place.id || idx} style={styles.placeCard}>
-            <ImageBackground
-              source={place.imageUrl ? { uri: place.imageUrl } : require("../../images/bookmarkBackground.png")}
-              style={styles.placeImage}
-              imageStyle={styles.placeImageRadius}
+          <View style={styles.rightQuickStack}>
+            <TouchableWithoutFeedback
+              onPress={() =>
+                quickMatchEnabled &&
+                navigation.navigate("QuickMatch", { cityId: selectedCity?.id })
+              }
             >
-              <View style={styles.rankBadge}><Text style={styles.rankText}>{idx + 1}</Text></View>
-              <Pressable style={styles.bookmarkBtn} hitSlop={12} onPress={() => handleSave(place.id)}>
-                <Ionicons
-                  name={
-                    activePlaceType === "cafe"
-                      ? (savedCafeByPlaceId[place.id] ? "bookmark" : "bookmark-outline")
-                      : (savedRestaurantByPlaceId[place.id] ? "bookmark" : "bookmark-outline")
-                  }
-                  size={20}
-                  color="#ffffff"
-                />
-              </Pressable>
-              <LinearGradient colors={["transparent", "rgba(0,0,0,0.75)"]} style={styles.placeGradient} />
-              <View style={styles.placeFooter}>
-                <View style={styles.placeTextCol}>
-                  <Text style={styles.placeNameKo}>{place.name || "-"}</Text>
-                  <Text style={styles.placeNameEn}>{place.address || "-"}</Text>
-                </View>
-                <Ionicons name="chevron-forward" size={20} color="#ffffff" />
+              <View
+                style={[
+                  styles.quickButtonCard,
+                  !quickMatchEnabled && styles.quickButtonCardDisabled,
+                ]}
+              >
+                <Quick />
+                <Text
+                  style={[
+                    styles.quickButtonText,
+                    !quickMatchEnabled && styles.quickButtonTextDisabled,
+                  ]}
+                >
+                  {quickMatchEnabled ? "빠른 매칭" : "지금은 사용할 수 없어요."}
+                </Text>
               </View>
-            </ImageBackground>
-          </Pressable>
-        ))}
-        {activePlaceType == null ? <Text style={styles.emptyText}>해당 태그는 아직 준비 중입니다.</Text> : null}
-        {activePlaceType != null && placeLoading ? (
-          <View style={styles.pendingWrap}>
-            <ActivityIndicator size="small" color="#1C73F0" />
-            <Text style={styles.pendingText}>
-              {activePlaceType === "cafe" ? "카페를 불러오는 중..." : "식당을 불러오는 중..."}
-            </Text>
+            </TouchableWithoutFeedback>
+            <TouchableWithoutFeedback
+              onPress={() => navigation.navigate("Chats")}
+            >
+              <View style={styles.quickButtonCard}>
+                <View style={styles.communityIconWrap}>
+                  <Speech />
+                  <View style={styles.communityBadge}>
+                    <Text style={styles.communityBadgeText}>2</Text>
+                  </View>
+                </View>
+                <Text style={styles.quickButtonText}>로컬 커뮤니티</Text>
+              </View>
+            </TouchableWithoutFeedback>
           </View>
-        ) : null}
-        {activePlaceType != null && !placeLoading && placeError ? <Text style={styles.emptyText}>{placeError}</Text> : null}
-        {activePlaceType != null && !placeLoading && !placeError && visiblePlaces.length === 0 ? <Text style={styles.emptyText}>표시할 장소가 없습니다.</Text> : null}
-
-        <Pressable style={styles.floatingPlusButton} onPress={loadHome}>
-          <Ionicons name="add" size={30} color="#fff" />
-        </Pressable>
-
-        <View style={styles.moreRow}>
-          <Text style={styles.moreText}>더보기</Text>
-          <Ionicons name="chevron-forward" size={14} color="#818181" />
         </View>
-      </View>
+      ) : null}
+
+      {homeMode === HOME_MODE_TRAVELER ? (
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>실시간 인기</Text>
+          <Text style={styles.sectionTime}>AM 9:00</Text>
+        </View>
+      ) : null}
+
+      {homeMode === HOME_MODE_TRAVELER ? (
+        <ChipRow activeId={activeChip} onSelect={setActiveChip} />
+      ) : null}
+
+      {homeMode === HOME_MODE_TRAVELER ? (
+        <View style={styles.popularPanel}>
+          {visiblePlaces.map((place, idx) => (
+            <Pressable key={place.id || idx} style={styles.placeCard}>
+              <ImageBackground
+                source={
+                  place.imageUrl
+                    ? { uri: place.imageUrl }
+                    : require("../../images/bookmarkBackground.png")
+                }
+                style={styles.placeImage}
+                imageStyle={styles.placeImageRadius}
+              >
+                <View style={styles.rankBadge}>
+                  <Text style={styles.rankText}>{idx + 1}</Text>
+                </View>
+                <Pressable
+                  style={styles.bookmarkBtn}
+                  hitSlop={12}
+                  onPress={() => handleSave(place.id)}
+                >
+                  <Ionicons
+                    name={
+                      activePlaceType === "cafe"
+                        ? savedCafeByPlaceId[place.id]
+                          ? "bookmark"
+                          : "bookmark-outline"
+                        : savedRestaurantByPlaceId[place.id]
+                          ? "bookmark"
+                          : "bookmark-outline"
+                    }
+                    size={20}
+                    color="#ffffff"
+                  />
+                </Pressable>
+                <LinearGradient
+                  colors={["transparent", "rgba(0,0,0,0.75)"]}
+                  style={styles.placeGradient}
+                />
+                <View style={styles.placeFooter}>
+                  <View style={styles.placeTextCol}>
+                    <Text style={styles.placeNameKo}>{place.name || "-"}</Text>
+                    <Text style={styles.placeNameEn}>
+                      {place.address || "-"}
+                    </Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={20} color="#ffffff" />
+                </View>
+              </ImageBackground>
+            </Pressable>
+          ))}
+          {activePlaceType == null ? (
+            <Text style={styles.emptyText}>
+              해당 태그는 아직 준비 중입니다.
+            </Text>
+          ) : null}
+          {activePlaceType != null && placeLoading ? (
+            <View style={styles.pendingWrap}>
+              <ActivityIndicator size="small" color="#1C73F0" />
+              <Text style={styles.pendingText}>
+                {activePlaceType === "cafe"
+                  ? "카페를 불러오는 중..."
+                  : "식당을 불러오는 중..."}
+              </Text>
+            </View>
+          ) : null}
+          {activePlaceType != null && !placeLoading && placeError ? (
+            <Text style={styles.emptyText}>{placeError}</Text>
+          ) : null}
+          {activePlaceType != null &&
+          !placeLoading &&
+          !placeError &&
+          visiblePlaces.length === 0 ? (
+            <Text style={styles.emptyText}>표시할 장소가 없습니다.</Text>
+          ) : null}
+
+          <Pressable style={styles.floatingPlusButton} onPress={loadHome}>
+            <Ionicons name="add" size={30} color="#fff" />
+          </Pressable>
+
+          <View style={styles.moreRow}>
+            <Text style={styles.moreText}>더보기</Text>
+            <Ionicons name="chevron-forward" size={14} color="#818181" />
+          </View>
+        </View>
       ) : null}
 
       {homeMode === HOME_MODE_LOCAL ? (
         <View style={styles.localMapPanel}>
           <View style={styles.localMapHeader}>
             <Text style={styles.localMapTitle}>현재 밍글 지도</Text>
-            <Text style={styles.localMapSubtitle}>{selectedCity?.name || "도시를 설정해주세요."}</Text>
+            <Text style={styles.localMapSubtitle}>
+              {selectedCity?.name || "도시를 설정해주세요."}
+            </Text>
           </View>
           {localMingleLoading ? (
             <View style={styles.pendingWrap}>
@@ -516,16 +664,31 @@ export function MainScreen() {
               <Text style={styles.pendingText}>밍글을 불러오는 중...</Text>
             </View>
           ) : null}
-          {localMingleError ? <Text style={styles.emptyText}>{localMingleError}</Text> : null}
+          {localMingleError ? (
+            <Text style={styles.emptyText}>{localMingleError}</Text>
+          ) : null}
           {!localMingleLoading && !localMingleError ? (
-            <MapView key={`local-map-${selectedCity?.id || "default"}`} style={styles.localMap} region={localMapRegion}>
+            <MapView
+              key={`local-map-${selectedCity?.id || "default"}`}
+              style={styles.localMap}
+              region={localMapRegion}
+            >
               {localMarkers.map((marker) => (
-                <Marker key={marker.id} coordinate={marker.coordinate} title={marker.title} description={`참여 ${marker.minglerCount}명`} />
+                <Marker
+                  key={marker.id}
+                  coordinate={marker.coordinate}
+                  title={marker.title}
+                  description={`참여 ${marker.minglerCount}명`}
+                />
               ))}
             </MapView>
           ) : null}
-          {!localMingleLoading && !localMingleError && localMarkers.length === 0 ? (
-            <Text style={styles.localMapEmptyText}>표시할 밍글 좌표가 없습니다.</Text>
+          {!localMingleLoading &&
+          !localMingleError &&
+          localMarkers.length === 0 ? (
+            <Text style={styles.localMapEmptyText}>
+              표시할 밍글 좌표가 없습니다.
+            </Text>
           ) : null}
         </View>
       ) : null}
