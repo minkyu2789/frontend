@@ -1,7 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { createQuickMatch } from "../../services/quickMatchService";
+import { useAuth } from "../../auth";
+import { decodeUserIdFromToken } from "../../auth/userId";
+import {
+  createQuickMatchSocketClient,
+  publishCreateQuickMatch,
+  subscribeUserQuickMatches,
+} from "../../services/quickMatchSocketService";
 
 const OPTION_ITEMS = [
   { key: "MINGLERS", title: "현지 밍글러", subtitle: "맛집 탐방" },
@@ -18,18 +24,132 @@ function formatElapsed(seconds) {
 }
 
 export function QuickMatch({ navigation, route }) {
+  const { token } = useAuth();
+  const userId = useMemo(() => Number(decodeUserIdFromToken(token) || 0), [token]);
   const [selected, setSelected] = useState("MINGLERS");
   const [submitting, setSubmitting] = useState(false);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [error, setError] = useState(null);
+  const [socketReady, setSocketReady] = useState(false);
   const startedAtRef = useRef(0);
   const elapsedTimerRef = useRef(null);
   const mountedRef = useRef(true);
+  const pendingRequestRef = useRef({
+    cityId: null,
+    targetType: null,
+    quickMatchId: null,
+  });
+  const clientRef = useRef(null);
+  const userSubscriptionRef = useRef(null);
   const cityId = useMemo(() => Number(route?.params?.cityId || 1), [route?.params?.cityId]);
   const selectedLabel = useMemo(
     () => OPTION_ITEMS.find((item) => item.key === selected)?.title || selected,
     [selected],
   );
+
+  useEffect(() => {
+    if (!userId) {
+      return undefined;
+    }
+
+    const client = createQuickMatchSocketClient({
+      onConnect: () => {
+        if (!mountedRef.current) {
+          return;
+        }
+        setSocketReady(true);
+      },
+      onError: (message) => {
+        if (!mountedRef.current) {
+          return;
+        }
+        setSocketReady(false);
+        setError(message || "소켓 연결 오류");
+      },
+    });
+
+    clientRef.current = client;
+    client.activate();
+
+    return () => {
+      userSubscriptionRef.current?.unsubscribe();
+      userSubscriptionRef.current = null;
+      client.deactivate();
+      clientRef.current = null;
+      if (mountedRef.current) {
+        setSocketReady(false);
+      }
+    };
+  }, [userId]);
+
+  useEffect(() => {
+    if (!socketReady || !clientRef.current || !userId) {
+      return;
+    }
+
+    userSubscriptionRef.current?.unsubscribe();
+    userSubscriptionRef.current = subscribeUserQuickMatches(clientRef.current, userId, (event) => {
+      if (!mountedRef.current) {
+        return;
+      }
+
+      const pending = pendingRequestRef.current;
+      const match = event?.quickMatch;
+      const quickMatchId = Number(match?.id || 0);
+      const isPendingQuickMatch =
+        (pending.quickMatchId && quickMatchId === pending.quickMatchId) ||
+        (Number(match?.cityId) === pending.cityId &&
+          String(match?.targetType || "") === pending.targetType &&
+          Number(match?.requesterUserId) === userId);
+
+      if (event?.eventType === "QUICK_MATCH_CREATED") {
+        const isRequester = Number(match?.requesterUserId) === userId;
+        if (isRequester && submitting && isPendingQuickMatch) {
+          pendingRequestRef.current = {
+            ...pending,
+            quickMatchId,
+          };
+        }
+      }
+
+      if (event?.eventType === "QUICK_MATCH_ACCEPTED" && submitting && isPendingQuickMatch) {
+        setSubmitting(false);
+        pendingRequestRef.current = {
+          cityId: null,
+          targetType: null,
+          quickMatchId: null,
+        };
+        navigation.goBack();
+        return;
+      }
+
+      if (event?.eventType === "QUICK_MATCH_DECLINED" && submitting && isPendingQuickMatch) {
+        setSubmitting(false);
+        pendingRequestRef.current = {
+          cityId: null,
+          targetType: null,
+          quickMatchId: null,
+        };
+        setError("빠른 매칭이 거절되었어요. 다시 시도해 주세요.");
+        return;
+      }
+
+      if (event?.eventType === "QUICK_MATCH_ERROR" && submitting) {
+        setSubmitting(false);
+        pendingRequestRef.current = {
+          cityId: null,
+          targetType: null,
+          quickMatchId: null,
+        };
+        setError(event?.reason || "빠른 매칭 요청 처리에 실패했습니다.");
+      }
+    });
+
+    return () => {
+      userSubscriptionRef.current?.unsubscribe();
+      userSubscriptionRef.current = null;
+    };
+  }, [cityId, navigation, selected, socketReady, submitting, userId]);
 
   useEffect(() => {
     return () => {
@@ -79,11 +199,20 @@ export function QuickMatch({ navigation, route }) {
 
     setSubmitting(true);
     setError(null);
+    pendingRequestRef.current = {
+      cityId,
+      targetType: String(selected || "ANY"),
+      quickMatchId: null,
+    };
     const requestStartedAt = Date.now();
     try {
-      await createQuickMatch({
+      if (!clientRef.current?.connected) {
+        throw new Error("소켓 연결이 준비되지 않았습니다. 잠시 후 다시 시도해주세요.");
+      }
+      await publishCreateQuickMatch(clientRef.current, {
         cityId,
-        targetType: selected,
+        message: null,
+        targetType: String(selected || "ANY"),
       });
       const elapsedMs = Date.now() - requestStartedAt;
       if (elapsedMs < MIN_PROGRESS_VISIBLE_MS) {
@@ -92,22 +221,23 @@ export function QuickMatch({ navigation, route }) {
       if (!mountedRef.current) {
         return;
       }
-      navigation.goBack();
     } catch (requestError) {
       if (!mountedRef.current) {
         return;
       }
       const message = requestError?.message || "빠른 매칭 생성에 실패했습니다.";
       setError(message);
+      setSubmitting(false);
+      pendingRequestRef.current = {
+        cityId: null,
+        targetType: null,
+        quickMatchId: null,
+      };
       console.warn("[QM CREATE] FAILED", {
         cityId,
         targetType: selected,
         message,
       });
-    } finally {
-      if (mountedRef.current) {
-        setSubmitting(false);
-      }
     }
   }
 
@@ -135,6 +265,7 @@ export function QuickMatch({ navigation, route }) {
         </View>
 
         {error ? <Text style={styles.errorText}>{error}</Text> : null}
+        {!socketReady ? <Text style={styles.metaText}>실시간 연결 중...</Text> : null}
 
         <Pressable style={[styles.confirmBtn, submitting && styles.confirmBtnDisabled]} onPress={handleConfirm} disabled={submitting}>
           <Text style={styles.confirmText}>{submitting ? "확인 중..." : "확인"}</Text>
@@ -246,6 +377,10 @@ const styles = StyleSheet.create({
     color: "#C62828",
     fontSize: 12,
     lineHeight: 16,
+  },
+  metaText: {
+    color: "#64748B",
+    fontSize: 12,
   },
   progressOverlay: {
     position: "absolute",
