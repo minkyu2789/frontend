@@ -1,5 +1,5 @@
-import { useCallback, useMemo, useState } from "react";
-import { ImageBackground, Pressable, ScrollView, StyleSheet, Text, TouchableWithoutFeedback, View } from "react-native";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ActivityIndicator, ImageBackground, Pressable, ScrollView, StyleSheet, Text, TouchableWithoutFeedback, View } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
@@ -64,8 +64,12 @@ export function MainScreen() {
   const [currentTrip, setCurrentTrip] = useState(null);
   const [selectedCity, setSelectedCity] = useState(null);
   const [places, setPlaces] = useState([]);
+  const [placesByType, setPlacesByType] = useState({ restaurant: [], cafe: [] });
+  const [placeLoading, setPlaceLoading] = useState(false);
+  const [placeError, setPlaceError] = useState(null);
   const [savedRestaurantByPlaceId, setSavedRestaurantByPlaceId] = useState({});
   const [savedCafeByPlaceId, setSavedCafeByPlaceId] = useState({});
+  const placeRequestSequenceRef = useRef(0);
 
   const userId = useMemo(() => decodeUserIdFromToken(token), [token]);
   const activePlaceType = useMemo(() => {
@@ -99,6 +103,55 @@ export function MainScreen() {
     );
   }
 
+  async function loadPlacesForType(cityId, placeType) {
+    if (!cityId || !placeType) {
+      setPlaces([]);
+      setPlaceLoading(false);
+      setPlaceError(null);
+      return;
+    }
+
+    const cachedPlaces = placesByType[placeType] ?? [];
+    setPlaces(cachedPlaces);
+    setPlaceLoading(true);
+    setPlaceError(null);
+
+    const requestSequence = ++placeRequestSequenceRef.current;
+
+    try {
+      if (placeType === "cafe") {
+        const cafeResponse = await fetchCafesByCity(cityId);
+        const cafes = cafeResponse?.cafes ?? [];
+        const enriched = await enrichWithImages(cafes, "cafe");
+        if (requestSequence !== placeRequestSequenceRef.current) {
+          return;
+        }
+        setPlacesByType((prev) => ({ ...prev, cafe: enriched }));
+        setPlaces(enriched);
+        return;
+      }
+
+      const restaurantResponse = await fetchRestaurantsByCity(cityId);
+      const restaurants = restaurantResponse?.restaurants ?? [];
+      const enriched = await enrichWithImages(restaurants, "restaurant");
+      if (requestSequence !== placeRequestSequenceRef.current) {
+        return;
+      }
+      setPlacesByType((prev) => ({ ...prev, restaurant: enriched }));
+      setPlaces(enriched);
+    } catch {
+      if (requestSequence !== placeRequestSequenceRef.current) {
+        return;
+      }
+      setPlaceError("장소를 불러오는 중입니다. 잠시 후 다시 시도해주세요.");
+      setPlaces(cachedPlaces);
+    } finally {
+      if (requestSequence === placeRequestSequenceRef.current) {
+        setPlaceLoading(false);
+      }
+    }
+  }
+
   async function loadHome() {
     try {
       const [allCities, tripsResponse, savedRestaurantsResponse, savedCafesResponse] = await Promise.all([
@@ -129,33 +182,19 @@ export function MainScreen() {
 
       setCurrentTrip(trip);
       setSelectedCity(city);
+      setPlacesByType({ restaurant: [], cafe: [] });
+      setPlaces([]);
+      setPlaceError(null);
+      setPlaceLoading(false);
       setSavedRestaurantByPlaceId(savedRestaurantMap);
       setSavedCafeByPlaceId(savedCafeMap);
-
-      if (!city?.id) {
-        setPlaces([]);
-        return;
-      }
-
-      if (!activePlaceType) {
-        setPlaces([]);
-        return;
-      }
-
-      if (activePlaceType === "cafe") {
-        const cafeResponse = await fetchCafesByCity(city.id);
-        const cafes = cafeResponse?.cafes ?? [];
-        setPlaces(await enrichWithImages(cafes, "cafe"));
-        return;
-      }
-
-      const restaurantResponse = await fetchRestaurantsByCity(city.id);
-      const restaurants = restaurantResponse?.restaurants ?? [];
-      setPlaces(await enrichWithImages(restaurants, "restaurant"));
     } catch {
       setCurrentTrip(null);
       setSelectedCity(null);
       setPlaces([]);
+      setPlacesByType({ restaurant: [], cafe: [] });
+      setPlaceLoading(false);
+      setPlaceError(null);
       setSavedRestaurantByPlaceId({});
       setSavedCafeByPlaceId({});
     }
@@ -164,8 +203,12 @@ export function MainScreen() {
   useFocusEffect(
     useCallback(() => {
       loadHome();
-    }, [activePlaceType, userId]),
+    }, [userId]),
   );
+
+  useEffect(() => {
+    loadPlacesForType(selectedCity?.id, activePlaceType);
+  }, [selectedCity?.id, activePlaceType]);
 
   async function handleSave(placeId) {
     if (activePlaceType === "cafe") {
@@ -304,7 +347,16 @@ export function MainScreen() {
           </Pressable>
         ))}
         {activePlaceType == null ? <Text style={styles.emptyText}>해당 태그는 아직 준비 중입니다.</Text> : null}
-        {activePlaceType != null && visiblePlaces.length === 0 ? <Text style={styles.emptyText}>표시할 장소가 없습니다.</Text> : null}
+        {activePlaceType != null && placeLoading ? (
+          <View style={styles.pendingWrap}>
+            <ActivityIndicator size="small" color="#1C73F0" />
+            <Text style={styles.pendingText}>
+              {activePlaceType === "cafe" ? "카페를 불러오는 중..." : "식당을 불러오는 중..."}
+            </Text>
+          </View>
+        ) : null}
+        {activePlaceType != null && !placeLoading && placeError ? <Text style={styles.emptyText}>{placeError}</Text> : null}
+        {activePlaceType != null && !placeLoading && !placeError && visiblePlaces.length === 0 ? <Text style={styles.emptyText}>표시할 장소가 없습니다.</Text> : null}
 
         <Pressable style={styles.floatingPlusButton} onPress={loadHome}>
           <Ionicons name="add" size={30} color="#fff" />
@@ -607,5 +659,17 @@ const styles = StyleSheet.create({
     fontSize: 14,
     textAlign: "center",
     paddingVertical: 12,
+  },
+  pendingWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 14,
+  },
+  pendingText: {
+    color: "#4B5563",
+    fontSize: 13,
+    fontWeight: "600",
   },
 });
