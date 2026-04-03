@@ -372,8 +372,6 @@ export function MyPage({ navigation }) {
                     <Ionicons name="chevron-forward" size={18} color="#111111" />
                   </Pressable>
                 </View>
-                <Text style={styles.tripTitle}>{getCityNameKo(tripCity)}</Text>
-                <Text style={styles.tripMeta}>{getTripMetaText(trip)}</Text>
                 {recentTripChatAvatars.length > 0 ? (
                   <View style={styles.tripAvatarRow}>
                     {recentTripChatAvatars.map((avatar, index) => (
@@ -390,6 +388,8 @@ export function MyPage({ navigation }) {
                     ))}
                   </View>
                 ) : null}
+                <Text style={styles.tripTitle}>{getCityNameKo(tripCity)}</Text>
+                <Text style={styles.tripMeta}>{getTripMetaText(trip)}</Text>
               </Pressable>
             );
           })}
@@ -546,7 +546,7 @@ const styles = StyleSheet.create({
   },
   tripAvatarRow: {
     flexDirection: "row",
-    marginTop: 10,
+    marginBottom: 8,
   },
   tripAvatarCircle: {
     width: 26,
