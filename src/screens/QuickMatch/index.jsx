@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { createQuickMatch } from "../../services/quickMatchService";
@@ -9,11 +9,65 @@ const OPTION_ITEMS = [
   { key: "ANY", title: "무관", subtitle: "상관없어요" },
 ];
 
+function formatElapsed(seconds) {
+  const safe = Number.isFinite(seconds) && seconds >= 0 ? Math.floor(seconds) : 0;
+  const minutes = String(Math.floor(safe / 60)).padStart(2, "0");
+  const remainSeconds = String(safe % 60).padStart(2, "0");
+  return `${minutes}:${remainSeconds}`;
+}
+
 export function QuickMatch({ navigation, route }) {
   const [selected, setSelected] = useState("MINGLERS");
   const [submitting, setSubmitting] = useState(false);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [error, setError] = useState(null);
+  const startedAtRef = useRef(0);
+  const elapsedTimerRef = useRef(null);
+  const mountedRef = useRef(true);
   const cityId = useMemo(() => Number(route?.params?.cityId || 1), [route?.params?.cityId]);
+  const selectedLabel = useMemo(
+    () => OPTION_ITEMS.find((item) => item.key === selected)?.title || selected,
+    [selected],
+  );
+
+  useEffect(() => {
+    return () => {
+      mountedRef.current = false;
+      if (elapsedTimerRef.current) {
+        clearInterval(elapsedTimerRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!submitting) {
+      if (elapsedTimerRef.current) {
+        clearInterval(elapsedTimerRef.current);
+      }
+      return;
+    }
+
+    startedAtRef.current = Date.now();
+    setElapsedSeconds(0);
+    if (elapsedTimerRef.current) {
+      clearInterval(elapsedTimerRef.current);
+    }
+
+    elapsedTimerRef.current = setInterval(() => {
+      if (!mountedRef.current) {
+        return;
+      }
+
+      const nextElapsed = Math.floor((Date.now() - startedAtRef.current) / 1000);
+      setElapsedSeconds(nextElapsed);
+    }, 1000);
+
+    return () => {
+      if (elapsedTimerRef.current) {
+        clearInterval(elapsedTimerRef.current);
+      }
+    };
+  }, [submitting]);
 
   async function handleConfirm() {
     if (!Number.isFinite(cityId) || cityId <= 0) {
@@ -29,8 +83,14 @@ export function QuickMatch({ navigation, route }) {
         cityId,
         targetType: selected,
       });
+      if (!mountedRef.current) {
+        return;
+      }
       navigation.goBack();
     } catch (requestError) {
+      if (!mountedRef.current) {
+        return;
+      }
       const message = requestError?.message || "빠른 매칭 생성에 실패했습니다.";
       setError(message);
       console.warn("[QM CREATE] FAILED", {
@@ -39,7 +99,9 @@ export function QuickMatch({ navigation, route }) {
         message,
       });
     } finally {
-      setSubmitting(false);
+      if (mountedRef.current) {
+        setSubmitting(false);
+      }
     }
   }
 
@@ -72,6 +134,21 @@ export function QuickMatch({ navigation, route }) {
           <Text style={styles.confirmText}>{submitting ? "확인 중..." : "확인"}</Text>
         </Pressable>
       </View>
+
+      {submitting ? (
+        <View style={styles.progressOverlay}>
+          <View style={styles.progressCard}>
+            <Pressable style={styles.progressCloseButton} onPress={() => navigation.goBack()}>
+              <Ionicons name="close" size={18} color="#334155" />
+            </Pressable>
+            <Text style={styles.progressTitle}>빠른 매칭 요청 중</Text>
+            <Text style={styles.progressTarget}>{selectedLabel}</Text>
+            <Text style={styles.progressDescription}>요청이 완료될 때까지 잠시만 기다려 주세요.</Text>
+            <Text style={styles.progressElapsedLabel}>경과 시간</Text>
+            <Text style={styles.progressElapsedValue}>{formatElapsed(elapsedSeconds)}</Text>
+          </View>
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -163,5 +240,69 @@ const styles = StyleSheet.create({
     color: "#C62828",
     fontSize: 12,
     lineHeight: 16,
+  },
+  progressOverlay: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(15, 23, 42, 0.45)",
+  },
+  progressCard: {
+    width: "82%",
+    borderRadius: 16,
+    backgroundColor: "#FFFFFF",
+    paddingTop: 18,
+    paddingBottom: 20,
+    paddingHorizontal: 16,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+  },
+  progressCloseButton: {
+    position: "absolute",
+    right: 10,
+    top: 10,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#F1F5F9",
+  },
+  progressTitle: {
+    marginTop: 4,
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#0F172A",
+  },
+  progressTarget: {
+    marginTop: 6,
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#1D4ED8",
+  },
+  progressDescription: {
+    marginTop: 10,
+    fontSize: 12,
+    lineHeight: 17,
+    color: "#475569",
+    textAlign: "center",
+  },
+  progressElapsedLabel: {
+    marginTop: 14,
+    fontSize: 11,
+    color: "#64748B",
+    fontWeight: "600",
+  },
+  progressElapsedValue: {
+    marginTop: 2,
+    fontSize: 24,
+    fontWeight: "800",
+    color: "#0F172A",
+    letterSpacing: 1,
   },
 });
