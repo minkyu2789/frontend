@@ -85,6 +85,20 @@ function ChipRow({ activeId, onSelect }) {
 export function MainScreen() {
   const navigation = useNavigation();
   const { token, logout } = useAuth();
+  const [currentTime, setCurrentTime] = useState('');
+
+  useFocusEffect(
+    useCallback(() => {
+      setCurrentTime(
+        new Date().toLocaleTimeString('en-US', {
+          hour: 'numeric',
+          minute: '2-digit',
+          hour12: true,
+        })
+      );
+    }, [])
+  );
+
   const [homeMode, setHomeMode] = useState(HOME_MODE_TRAVELER);
   const [activeChip, setActiveChip] = useState("restaurant");
   const [currentTrip, setCurrentTrip] = useState(null);
@@ -560,7 +574,7 @@ export function MainScreen() {
         {homeMode === HOME_MODE_TRAVELER ? (
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>실시간 인기</Text>
-            <Text style={styles.sectionTime}>AM 9:00</Text>
+            <Text style={styles.sectionTime}>{currentTime}</Text>
           </View>
         ) : null}
 
