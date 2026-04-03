@@ -1,8 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { SearchDropdown } from "../../../components/SearchDropdown";
 import { useAuth } from "../../../auth";
-import { fetchNationalities } from "../../../services";
+import { fetchKeywords, fetchNationalities } from "../../../services";
 
 function normalizeLiteral(value) {
   return String(value || "").trim().toLowerCase();
@@ -25,6 +25,15 @@ function getNationalitySearchText(nationality) {
     .join(" ");
 }
 
+function formatKeywordLabel(label) {
+  const text = String(label || "").trim();
+  if (!text) {
+    return "";
+  }
+
+  return text.startsWith("#") ? text : `#${text}`;
+}
+
 export function SignUpScreen({ navigation }) {
   const { signup, login } = useAuth();
   const [form, setForm] = useState({
@@ -39,8 +48,18 @@ export function SignUpScreen({ navigation }) {
   const [nationalityQuery, setNationalityQuery] = useState("");
   const [selectedNationality, setSelectedNationality] = useState(null);
   const [nationalities, setNationalities] = useState([]);
+  const [keywords, setKeywords] = useState([]);
+  const [selectedKeywordIds, setSelectedKeywordIds] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+
+  const keywordCountLabel = useMemo(() => {
+    if (selectedKeywordIds.length === 0) {
+      return "선택 없음";
+    }
+
+    return `${selectedKeywordIds.length}개 선택`;
+  }, [selectedKeywordIds.length]);
 
   function updateField(key, value) {
     setForm((previous) => ({
@@ -50,17 +69,25 @@ export function SignUpScreen({ navigation }) {
   }
 
   useEffect(() => {
-    async function loadNationalities() {
+    async function loadSignupData() {
       try {
-        const response = await fetchNationalities();
-        const loaded = response?.nationalities ?? [];
-        setNationalities(loaded);
+        const [nationalityResponse, keywordResponse] = await Promise.all([
+          fetchNationalities(),
+          fetchKeywords(),
+        ]);
+
+        const loadedNationalities = nationalityResponse?.nationalities ?? [];
+        const loadedKeywords = keywordResponse?.keywords ?? [];
+
+        setNationalities(loadedNationalities);
+        setKeywords(loadedKeywords.sort((a, b) => Number(a?.priority ?? 0) - Number(b?.priority ?? 0)));
       } catch {
         setNationalities([]);
+        setKeywords([]);
       }
     }
 
-    loadNationalities();
+    loadSignupData();
   }, []);
 
   function handleNationalityQueryChange(nextQuery) {
@@ -73,6 +100,16 @@ export function SignUpScreen({ navigation }) {
       return normalizedQuery === ko || normalizedQuery === en || normalizedQuery === code;
     }) || null;
     setSelectedNationality(exactMatched);
+  }
+
+  function toggleKeyword(keywordId) {
+    setSelectedKeywordIds((previous) => {
+      if (previous.includes(keywordId)) {
+        return previous.filter((id) => id !== keywordId);
+      }
+
+      return [...previous, keywordId];
+    });
   }
 
   async function handleSignUp() {
@@ -102,7 +139,7 @@ export function SignUpScreen({ navigation }) {
         sex: form.sex.trim(),
         introduction: form.introduction?.trim() ? form.introduction.trim() : null,
         nationalityId: selectedNationality.id,
-        keywordIds: [],
+        keywordIds: selectedKeywordIds,
       });
 
       await login(form.username.trim(), form.password);
@@ -116,7 +153,7 @@ export function SignUpScreen({ navigation }) {
   return (
     <ScrollView contentContainerStyle={styles.container}>
       <Text style={styles.title}>회원가입</Text>
-      <Text style={styles.subtitle}>Figma 인증 화면 추가 전 임시 인증 UI입니다.</Text>
+      <Text style={styles.subtitle}>기본 정보와 여행 스타일을 설정해주세요.</Text>
 
       <View style={styles.form}>
         <Field label="Username" value={form.username} onChangeText={(v) => updateField("username", v)} />
@@ -142,6 +179,28 @@ export function SignUpScreen({ navigation }) {
           }}
           emptyText="일치하는 국가가 없습니다."
         />
+
+        <View style={styles.keywordHeaderRow}>
+          <Text style={styles.label}>여행 스타일 키워드</Text>
+          <Text style={styles.keywordCount}>{keywordCountLabel}</Text>
+        </View>
+        <Text style={styles.keywordHint}>중복 선택 가능</Text>
+        <View style={styles.keywordWrap}>
+          {keywords.map((keyword) => {
+            const active = selectedKeywordIds.includes(keyword.id);
+            return (
+              <Pressable
+                key={keyword.id}
+                style={[styles.keywordChip, active && styles.keywordChipActive]}
+                onPress={() => toggleKeyword(keyword.id)}
+              >
+                <Text style={[styles.keywordChipText, active && styles.keywordChipTextActive]}>
+                  {formatKeywordLabel(keyword.label)}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
 
         <Text style={styles.label}>Sex</Text>
         <View style={styles.sexRow}>
@@ -235,6 +294,48 @@ const styles = StyleSheet.create({
   textArea: {
     minHeight: 70,
     textAlignVertical: "top",
+  },
+  keywordHeaderRow: {
+    marginTop: 4,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  keywordCount: {
+    fontSize: 12,
+    color: "#4F7DF3",
+    fontWeight: "600",
+  },
+  keywordHint: {
+    marginTop: -2,
+    fontSize: 12,
+    color: "#8D8D8D",
+  },
+  keywordWrap: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginBottom: 4,
+  },
+  keywordChip: {
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#D9E4FF",
+    backgroundColor: "#F3F6FF",
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  keywordChipActive: {
+    borderColor: "#0169FE",
+    backgroundColor: "#EAF2FF",
+  },
+  keywordChipText: {
+    color: "#3A4A6B",
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  keywordChipTextActive: {
+    color: "#0169FE",
   },
   sexRow: {
     flexDirection: "row",
