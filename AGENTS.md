@@ -3,6 +3,7 @@
 ## Project Context
 
 - This repository is a React Native (Expo) frontend project.
+- Also follow monorepo coordination rules in `../AGENTS.md` for cross-repository work.
 - Build UI and interaction flows from `../figma.pdf`.
 - Build data integration from backend APIs in `../backend`.
 - Keep implementation aligned with existing navigation structure in `src/navigation`.
