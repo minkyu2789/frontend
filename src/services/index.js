@@ -1,6 +1,7 @@
 export * from './authService';
 export * from './chatService';
 export * from './keywordService';
+export * from './localService';
 export * from './mingleService';
 export * from './placeService';
 export * from './quickMatchService';
