@@ -374,7 +374,7 @@ export function MyPage({ navigation }) {
                       onPress={() => openTripEditor(safeTripId)}
                       disabled={safeTripId <= 0}
                     >
-                      <Ionicons name="chevron-forward" size={18} color="#111111" />
+                      <Ionicons name="chevron-forward" size={18} color="#FFFFFF" />
                     </Pressable>
                   </View>
                   {profileImageAvatars.length > 0 ? (
@@ -530,10 +530,10 @@ const styles = StyleSheet.create({
   },
   tripCardOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(255,255,255,0.18)",
+    backgroundColor: "rgba(0,0,0,0.05)",
   },
   tripCardOverlayWithImage: {
-    backgroundColor: "rgba(255,255,255,0.28)",
+    backgroundColor: "rgba(0,0,0,0.08)",
   },
   tripCardContent: {
     position: "relative",
@@ -557,12 +557,12 @@ const styles = StyleSheet.create({
   tripTitle: {
     fontSize: 18,
     fontWeight: "700",
-    color: "#111111",
+    color: "#FFFFFF",
     marginBottom: 2,
   },
   tripMeta: {
     fontSize: 14,
-    color: "#8A8A8A",
+    color: "rgba(255,255,255,0.9)",
     fontWeight: "600",
     lineHeight: 20,
   },
