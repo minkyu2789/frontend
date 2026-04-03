@@ -40,6 +40,8 @@ export function QuickMatchAlertListener() {
   const userId = useMemo(() => toNumberOrNull(decodeUserIdFromToken(token)), [token]);
   const [socketReady, setSocketReady] = useState(false);
   const [subscribedCityIds, setSubscribedCityIds] = useState([]);
+  const [localCityIds, setLocalCityIds] = useState([]);
+  const [currentTripCityId, setCurrentTripCityId] = useState(null);
   const [socketError, setSocketError] = useState(null);
   const [bannerMessage, setBannerMessage] = useState(null);
   const [bannerVisible, setBannerVisible] = useState(false);
@@ -177,6 +179,8 @@ export function QuickMatchAlertListener() {
   const loadSubscribedCityIds = useCallback(async () => {
     if (!userId) {
       setSubscribedCityIds([]);
+      setLocalCityIds([]);
+      setCurrentTripCityId(null);
       return;
     }
 
@@ -193,8 +197,12 @@ export function QuickMatchAlertListener() {
         .filter(Boolean);
       const merged = Array.from(new Set([tripCityId, ...localCityIds].filter(Boolean))).sort((a, b) => a - b);
       setSubscribedCityIds(merged);
+      setLocalCityIds(Array.from(new Set(localCityIds)).sort((a, b) => a - b));
+      setCurrentTripCityId(tripCityId);
     } catch {
       setSubscribedCityIds([]);
+      setLocalCityIds([]);
+      setCurrentTripCityId(null);
     }
   }, [userId]);
 
@@ -325,8 +333,27 @@ export function QuickMatchAlertListener() {
       console.log("[QM SOCKET] SUBSCRIBE CITY", cityId);
       const subscription = subscribeCityQuickMatches(clientRef.current, cityId, (event) => {
         console.log("[QM SOCKET] CITY EVENT", event?.eventType || "-", event?.quickMatch?.id || "-");
+        const quickMatch = event?.quickMatch;
+        const eventType = event?.eventType;
+        const requesterUserId = toNumberOrNull(quickMatch?.requesterUserId);
+        const eventCityId = toNumberOrNull(quickMatch?.cityId) || cityId;
+        const eventTargetType = String(event?.targetType || quickMatch?.targetType || "ANY");
         const targetUserIds = event?.targetUserIds ?? [];
-        const isTargetUser = targetUserIds.length === 0 || targetUserIds.some((id) => toNumberOrNull(id) === userId);
+        const isRequester = requesterUserId && requesterUserId === userId;
+        const isLocalForCity = localCityIds.includes(eventCityId);
+        const isTravelerForCity = currentTripCityId != null && Number(currentTripCityId) === Number(eventCityId);
+        const matchesTargetByRole = (
+          (eventTargetType === "LOCALS" && isLocalForCity) ||
+          (eventTargetType === "MINGLERS" && isTravelerForCity) ||
+          eventTargetType === "ANY"
+        );
+        const isExplicitTargetUser = targetUserIds.some((id) => toNumberOrNull(id) === userId);
+        const isTargetUser = targetUserIds.length > 0 ? isExplicitTargetUser : matchesTargetByRole;
+
+        if (eventType === "QUICK_MATCH_CREATED" && isRequester) {
+          return;
+        }
+
         if (!isTargetUser) {
           return;
         }
@@ -337,10 +364,10 @@ export function QuickMatchAlertListener() {
           return;
         }
 
-        if (event?.eventType === "QUICK_MATCH_CREATED") {
+        if (eventType === "QUICK_MATCH_CREATED") {
           setIncomingQuickMatch(event);
         }
-        showInAppBanner(getEventMessage(event?.eventType));
+        showInAppBanner(getEventMessage(eventType));
       });
       if (subscription) {
         citySubscriptionRef.current.set(cityId, subscription);
@@ -351,7 +378,7 @@ export function QuickMatchAlertListener() {
       citySubscriptionRef.current.forEach((subscription) => subscription?.unsubscribe());
       citySubscriptionRef.current.clear();
     };
-  }, [socketReady, userId, subscribedCityIds, shouldNotify, showInAppBanner, clearIncomingQuickMatchIfResolved]);
+  }, [socketReady, userId, subscribedCityIds, localCityIds, currentTripCityId, shouldNotify, showInAppBanner, clearIncomingQuickMatchIfResolved]);
 
   const hasBanner = bannerVisible && bannerMessage;
   const hasIncomingQuickMatch = Boolean(incomingQuickMatch?.quickMatch?.id);
